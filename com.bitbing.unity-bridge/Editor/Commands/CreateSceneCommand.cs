@@ -12,7 +12,7 @@ namespace BitBing.UnityBridge.Editor.Commands
     [Serializable]
     public class CreateSceneCommand : IAgentCommand
     {
-        private readonly string _path;
+        private string _path;
 
         public CreateSceneCommand(string path)
         {
@@ -26,26 +26,27 @@ namespace BitBing.UnityBridge.Editor.Commands
                 return CommandResult.Failure("INVALID_PATH", "Scene path is required");
             }
 
-            if (!_path.EndsWith(".unity"))
+            var path = _path;
+            if (!path.EndsWith(".unity"))
             {
-                _path += ".unity";
+                path += ".unity";
             }
 
             try
             {
-                if (!IsPathSafe(_path))
+                if (!IsPathSafe(path))
                 {
                     return CommandResult.Failure("INVALID_PATH", "Path must be within Assets/ directory");
                 }
 
                 var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Additive);
 
-                EditorSceneManager.SaveScene(scene, _path);
+                EditorSceneManager.SaveScene(scene, path);
 
                 return CommandResult.SuccessResult(new Dictionary<string, object>
                 {
-                    ["path"] = _path,
-                    ["name"] = System.IO.Path.GetFileNameWithoutExtension(_path)
+                    ["path"] = path,
+                    ["name"] = System.IO.Path.GetFileNameWithoutExtension(path)
                 });
             }
             catch (Exception ex)

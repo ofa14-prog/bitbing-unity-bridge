@@ -130,12 +130,12 @@ namespace BitBing.UnityBridge.Editor.UI
 
         private void SetupButtons()
         {
-            var playButton = _root.Query<Button>("playButton");
-            var stopButton = _root.Query<Button>("stopButton");
-            var screenshotButton = _root.Query<Button>("screenshotButton");
-            var refreshButton = _root.Query<Button>("refreshButton");
-            var clearConsoleButton = _root.Query<Button>("clearConsoleButton");
-            var clearLogsButton = _root.Query<Button>("clearLogsButton");
+            var playButton = _root.Q<Button>("playButton");
+            var stopButton = _root.Q<Button>("stopButton");
+            var screenshotButton = _root.Q<Button>("screenshotButton");
+            var refreshButton = _root.Q<Button>("refreshButton");
+            var clearConsoleButton = _root.Q<Button>("clearConsoleButton");
+            var clearLogsButton = _root.Q<Button>("clearLogsButton");
 
             if (playButton != null) playButton.clicked += () => ExecuteCommand("enter_play_mode");
             if (stopButton != null) stopButton.clicked += () => ExecuteCommand("exit_play_mode");

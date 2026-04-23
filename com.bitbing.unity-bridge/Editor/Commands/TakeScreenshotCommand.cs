@@ -43,12 +43,9 @@ namespace BitBing.UnityBridge.Editor.Commands
 
                 var fullPath = Path.GetFullPath(_outputPath);
 
-                // ScreenCapture is available in Unity 2022+
-#if UNITY_2022_3_OR_NEWER
-                var screenshot = UnityEngine.ScreenCapture.CaptureScreenshot(_outputPath, _includeUI);
-#else
-                var screenshot = UnityEngine.ScreenCapture.CaptureScreenshot(_outputPath);
-#endif
+                // ScreenCapture.CaptureScreenshot returns void; the second arg
+                // is a supersize multiplier (int), not an includeUI flag.
+                UnityEngine.ScreenCapture.CaptureScreenshot(_outputPath, 1);
 
                 return CommandResult.SuccessResult(new Dictionary<string, object>
                 {
