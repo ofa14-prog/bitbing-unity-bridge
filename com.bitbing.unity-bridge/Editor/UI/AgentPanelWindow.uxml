@@ -1,0 +1,40 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+  <ui:VisualElement class="root">
+
+    <ui:VisualElement class="section connection-section">
+      <ui:Label text="BAĞLANTI" class="section-title"/>
+      <ui:VisualElement class="connection-row">
+        <ui:VisualElement class="status-dot" name="connectionDot"/>
+        <ui:Label name="connectionLabel" text="Bağlı değil" class="connection-text"/>
+        <ui:Button name="connectButton" text="Bağlan" class="connect-button"/>
+      </ui:VisualElement>
+    </ui:VisualElement>
+
+    <ui:VisualElement class="section agents-section">
+      <ui:Label text="AGENT DURUMLARI" class="section-title"/>
+      <ui:VisualElement name="agentCardsContainer"/>
+    </ui:VisualElement>
+
+    <ui:VisualElement class="section log-section">
+      <ui:VisualElement class="section-header">
+        <ui:Label text="LOG AKIŞI" class="section-title"/>
+        <ui:Button name="clearLogsButton" text="Temizle" class="clear-button"/>
+      </ui:VisualElement>
+      <ui:ScrollView name="logScrollView" class="log-view">
+        <ui:VisualElement name="logContainer"/>
+      </ui:ScrollView>
+    </ui:VisualElement>
+
+    <ui:VisualElement class="section commands-section">
+      <ui:Label text="HIZLI KOMUTLAR" class="section-title"/>
+      <ui:VisualElement class="command-buttons">
+        <ui:Button name="playButton" text="▶ Play Mode" class="command-button"/>
+        <ui:Button name="stopButton" text="⏹ Stop" class="command-button"/>
+        <ui:Button name="screenshotButton" text="📸 Ekran Al" class="command-button"/>
+        <ui:Button name="refreshButton" text="🔄 Refresh" class="command-button"/>
+        <ui:Button name="clearConsoleButton" text="🧹 Clear Console" class="command-button"/>
+      </ui:VisualElement>
+    </ui:VisualElement>
+
+  </ui:VisualElement>
+</ui:UXML>

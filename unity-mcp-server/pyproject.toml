@@ -1,0 +1,52 @@
+[project]
+name = "unity-mcp-server"
+version = "0.1.0"
+description = "MCP server for AI-driven Unity game development with 6-agent orchestration"
+authors = [
+    { name = "AI GameDev Platform", email = "dev@aigamedev.local" }
+]
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = [
+    "mcp[http]=1.1.2",
+    "httpx>=0.27.0",
+    "anthropic>=0.26.0",
+    "chromadb>=1.8.0",
+    "langchain>=0.2.0",
+    "langchain-anthropic>=0.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "ruff>=0.6.0",
+]
+
+[project.scripts]
+unity-mcp = "unity_mcp_server.main:main"
+unity-mcp-cli = "unity_mcp_server.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E501"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/unity_mcp_server"]
+
+[tool.hatch.build.targets.wheel.package-data]
+"unity_mcp_server" = ["py.typed"]
+
+[tool.mcp]
+name = "unity-bridge"
+description = "MCP server for Unity Editor with 6-agent AI orchestration"
+port = 8080

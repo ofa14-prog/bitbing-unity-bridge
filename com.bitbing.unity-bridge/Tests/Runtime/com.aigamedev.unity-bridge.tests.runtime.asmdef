@@ -1,0 +1,11 @@
+{
+    "name": "AIGameDev.UnityBridge.Tests.Runtime",
+    "rootNamespace": "AIGameDev.UnityBridge.Tests.Runtime",
+    "references": [
+        "AIGameDev.UnityBridge.Runtime"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "autoReferenced": true
+}

@@ -1,0 +1,90 @@
+:root {
+  --color-vates: rgb(255, 59, 59);
+  --color-diafor: rgb(255, 214, 0);
+  --color-ahbab: rgb(0, 230, 118);
+  --color-obsidere: rgb(41, 121, 255);
+  --color-patientia: rgb(170, 0, 255);
+  --color-magnumpus: rgb(255, 109, 0);
+
+  --bg-surface: rgb(30, 30, 30);
+  --bg-elevated: rgb(40, 40, 40);
+  --text-primary: rgb(220, 220, 220);
+  --text-dim: rgb(120, 120, 120);
+
+  --font-size-sm: 11px;
+  --font-size-md: 12px;
+  --spacing-sm: 4px;
+  --spacing-md: 8px;
+  --spacing-lg: 12px;
+}
+
+.root {
+  background-color: var(--bg-surface);
+  padding: var(--spacing-md);
+  flex-grow: 1;
+}
+
+.section {
+  margin-bottom: var(--spacing-lg);
+  border-width: 1px;
+  border-color: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: var(--spacing-md);
+}
+
+.section-title {
+  font-size: var(--font-size-sm);
+  color: var(--text-dim);
+  -unity-font-style: bold;
+  margin-bottom: var(--spacing-sm);
+}
+
+.connection-row {
+  flex-direction: row;
+  align-items: center;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  background-color: var(--text-dim);
+}
+
+.status-dot.connected {
+  background-color: var(--color-ahbab);
+}
+
+.connection-text {
+  flex-grow: 1;
+  margin-left: var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+}
+
+.connect-button {
+  font-size: var(--font-size-sm);
+}
+
+.log-view {
+  max-height: 200px;
+  background-color: var(--bg-elevated);
+  border-radius: 3px;
+}
+
+.log-line {
+  font-size: var(--font-size-sm);
+  padding: 2px var(--spacing-sm);
+  -unity-font-definition: resource("Fonts/RobotoMono");
+}
+
+.command-buttons {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.command-button {
+  margin: 2px;
+  font-size: var(--font-size-sm);
+}

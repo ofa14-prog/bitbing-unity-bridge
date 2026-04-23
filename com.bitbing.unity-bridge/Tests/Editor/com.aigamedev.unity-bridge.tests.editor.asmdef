@@ -1,0 +1,18 @@
+{
+    "name": "AIGameDev.UnityBridge.Tests.Editor",
+    "rootNamespace": "AIGameDev.UnityBridge.Tests.Editor",
+    "references": [
+        "AIGameDev.UnityBridge.Editor",
+        "AIGameDev.UnityBridge.Runtime"
+    ],
+    "includePlatforms": ["Editor"],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "Newtonsoft.Json.dll",
+        "UnityEngine.TestRunner.dll",
+        "UnityEditor.TestRunner.dll"
+    ],
+    "autoReferenced": false
+}

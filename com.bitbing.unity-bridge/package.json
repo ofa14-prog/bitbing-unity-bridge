@@ -1,0 +1,17 @@
+{
+  "name": "com.bitbing.unity-bridge",
+  "displayName": "BitBing Platform — Unity Bridge",
+  "version": "0.1.0",
+  "unity": "2022.3",
+  "unityRelease": "0f1",
+  "description": "Connects AI assistants (Claude, Cursor, Copilot) to Unity Editor via MCP. Provides programmatic editor control and an in-editor UI panel for monitoring and interaction.",
+  "author": {
+    "name": "AI GameDev Platform",
+    "email": "dev@aigamedev.local"
+  },
+  "license": "MIT",
+  "keywords": ["ai", "gamedev", "automation", "agent", "editor", "mcp"],
+  "dependencies": {
+    "com.unity.nuget.newtonsoft-json": "3.2.1"
+  }
+}

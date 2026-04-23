@@ -1,0 +1,9 @@
+{
+    "name": "BitBing.UnityBridge.Runtime",
+    "rootNamespace": "BitBing.UnityBridge.Runtime",
+    "references": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "autoReferenced": true
+}

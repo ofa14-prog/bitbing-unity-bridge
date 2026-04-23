@@ -1,0 +1,22 @@
+{
+    "name": "BitBing.UnityBridge.Editor",
+    "rootNamespace": "BitBing.UnityBridge.Editor",
+    "references": [
+        "BitBing.UnityBridge.Runtime"
+    ],
+    "includePlatforms": ["Editor"],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [
+        "Newtonsoft.Json.dll"
+    ],
+    "autoReferenced": false,
+    "versionDefines": [
+        {
+            "name": "com.unity.nuget.newtonsoft-json",
+            "expression": "3.2.1",
+            "define": "BITBING_NEWTONSOFT"
+        }
+    ]
+}
