@@ -8,10 +8,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
 
-#if AIGAMEDEV_NEWTONSOFT
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-#endif
 
 namespace BitBing.UnityBridge.Editor
 {

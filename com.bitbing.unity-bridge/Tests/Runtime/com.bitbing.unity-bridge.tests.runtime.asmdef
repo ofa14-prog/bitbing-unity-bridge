@@ -1,0 +1,12 @@
+{
+    "name": "BitBing.UnityBridge.Tests.Runtime",
+    "rootNamespace": "BitBing.UnityBridge.Tests.Runtime",
+    "references": [
+        "BitBing.UnityBridge.Runtime"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "autoReferenced": false,
+    "defineConstraints": ["UNITY_INCLUDE_TESTS"]
+}

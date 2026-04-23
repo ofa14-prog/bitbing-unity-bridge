@@ -3,11 +3,12 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
 using UnityEditor;
+using BitBing.UnityBridge.Editor.Settings;
 
 namespace BitBing.UnityBridge.Editor.UI
 {
     /// <summary>
-    /// Main EditorWindow for the AI GameDev Platform panel.
+    /// Main EditorWindow for the BitBing Platform panel.
     /// Provides UI for monitoring agent status, viewing logs, and sending commands.
     /// Based on EKLENTİR.md §8.
     /// </summary>
@@ -31,10 +32,10 @@ namespace BitBing.UnityBridge.Editor.UI
         private static readonly Color ColorPatientia = new Color(170f / 255f, 0, 1f);
         private static readonly Color ColorMagnumpus = new Color(1f, 109f / 255f, 0);
 
-        [MenuItem("Window/AI GameDev/Agent Panel %#g")]
+        [MenuItem("Window/BitBing/Agent Panel %#g")]
         public static void ShowWindow()
         {
-            var window = GetWindow<AgentPanelWindow>("AI GameDev");
+            var window = GetWindow<AgentPanelWindow>("BitBing");
             window.minSize = new Vector2(300, 400);
             window.Show();
         }
@@ -56,7 +57,10 @@ namespace BitBing.UnityBridge.Editor.UI
 
         private void CreateUI()
         {
-            var template = EditorGUIUtility.Load("Assets/com.aigamedev.unity-bridge/Editor/UI/AgentPanelWindow.uxml") as VisualTreeAsset;
+            const string uxmlPath = "Packages/com.bitbing.unity-bridge/Editor/UI/AgentPanelWindow.uxml";
+            const string ussPath = "Packages/com.bitbing.unity-bridge/Editor/UI/AgentPanelWindow.uss";
+
+            var template = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(uxmlPath);
 
             if (template == null)
             {
@@ -66,7 +70,8 @@ namespace BitBing.UnityBridge.Editor.UI
 
             _root = template.CloneTree();
             rootVisualElement.Add(_root);
-            rootVisualElement.styleSheets.Add(EditorGUIUtility.Load("Assets/com.aigamedev.unity-bridge/Editor/UI/AgentPanelWindow.uss") as StyleSheet);
+            var styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(ussPath);
+            if (styleSheet != null) rootVisualElement.styleSheets.Add(styleSheet);
 
             SetupReferences();
             SetupAgentCards();
