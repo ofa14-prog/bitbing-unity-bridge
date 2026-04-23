@@ -1,11 +1,10 @@
-guid: B8971A9F-EF5B-4EE6-B8A0-33DCD2C9288A
-fileID: 11500000
-instanceID: 0
-assetPath: 
-exportSettings:
-  dependencyVersion: 1
-  useGravity: 1
-  isBuiltin: 0
-userData: 
-assetBundleName: 
-assetBundleVariant: 
+fileFormatVersion: 2
+guid: 718ea3db9ffbe2001527339e1199d5e3
+ScriptedImporter:
+  internalIDToNameTable: []
+  externalObjects: {}
+  serializedVersion: 2
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+  script: {fileID: 13804, guid: 0000000000000000e000000000000000, type: 0}

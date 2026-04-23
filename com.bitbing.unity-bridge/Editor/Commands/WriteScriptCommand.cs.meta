@@ -1,11 +1,11 @@
-guid: BE05BC5E-792F-4D06-9ABE-A48823A8A5B8
-fileID: 11500000
-instanceID: 0
-assetPath: 
-exportSettings:
-  dependencyVersion: 1
-  useGravity: 1
-  isBuiltin: 0
-userData: 
-assetBundleName: 
-assetBundleVariant: 
+fileFormatVersion: 2
+guid: 20a97d265aff48f757f75521a457969b
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
