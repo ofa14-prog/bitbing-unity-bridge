@@ -51,8 +51,14 @@ namespace BitBing.UnityBridge.Editor.UI
 
         public void OnDisable()
         {
-            _mcpListener?.Stop();
-            _mcpListener?.Dispose();
+            if (_mcpListener != null)
+            {
+                _mcpListener.OnLog -= OnLogReceived;
+                _mcpListener.OnMessageProcessed -= OnMessageProcessed;
+                _mcpListener.Stop();
+                _mcpListener.Dispose();
+                _mcpListener = null;
+            }
         }
 
         private void CreateUI()
@@ -334,7 +340,11 @@ namespace BitBing.UnityBridge.Editor.UI
 
         private void OnLogReceived(string source, string message)
         {
-            if (!_settings.logVerbose && message.Contains("Heartbeat")) return;
+            // Drop logs once the window is being torn down — the ScrollView's
+            // internal state goes null during OnDisable and ScrollTo then NREs.
+            if (rootVisualElement == null || rootVisualElement.panel == null) return;
+            if (_settings != null && !_settings.logVerbose && message.Contains("Heartbeat")) return;
+            if (_logContainer == null) return;
 
             var logLine = new VisualElement();
             logLine.style.flexDirection = FlexDirection.Row;
@@ -355,14 +365,18 @@ namespace BitBing.UnityBridge.Editor.UI
             msg.style.whiteSpace = WhiteSpace.Normal;
             logLine.Add(msg);
 
-            _logContainer?.Add(logLine);
+            _logContainer.Add(logLine);
 
-            while (_logContainer?.childCount > 100)
+            while (_logContainer.childCount > 100)
             {
                 _logContainer.RemoveAt(0);
             }
 
-            _logScrollView?.ScrollTo(logLine);
+            if (_logScrollView != null && _logScrollView.panel != null)
+            {
+                try { _logScrollView.ScrollTo(logLine); }
+                catch (NullReferenceException) { /* UI torn down mid-scroll */ }
+            }
         }
 
         private void OnMessageProcessed(McpMessage message, McpResponse response)
