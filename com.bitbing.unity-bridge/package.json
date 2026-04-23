@@ -6,11 +6,11 @@
   "unityRelease": "0f1",
   "description": "Connects AI assistants (Claude, Cursor, Copilot) to Unity Editor via MCP. Provides programmatic editor control and an in-editor UI panel for monitoring and interaction.",
   "author": {
-    "name": "AI GameDev Platform",
-    "email": "dev@aigamedev.local"
+    "name": "BitBing Platform",
+    "email": "dev@bitbing.local"
   },
   "license": "MIT",
-  "keywords": ["ai", "gamedev", "automation", "agent", "editor", "mcp"],
+  "keywords": ["ai", "gamedev", "automation", "agent", "editor", "mcp", "bitbing"],
   "dependencies": {
     "com.unity.nuget.newtonsoft-json": "3.2.1"
   }
