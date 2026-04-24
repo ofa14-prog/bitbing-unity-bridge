@@ -1,90 +1,200 @@
 :root {
-  --color-vates: rgb(255, 59, 59);
-  --color-diafor: rgb(255, 214, 0);
-  --color-ahbab: rgb(0, 230, 118);
-  --color-obsidere: rgb(41, 121, 255);
-  --color-patientia: rgb(170, 0, 255);
-  --color-magnumpus: rgb(255, 109, 0);
+  --color-vates:     rgb(255, 59,  59);
+  --color-diafor:    rgb(255, 214,  0);
+  --color-ahbab:     rgb(  0, 230, 118);
+  --color-obsidere:  rgb( 41, 121, 255);
+  --color-patientia: rgb(170,   0, 255);
+  --color-magnumpus: rgb(255, 109,   0);
 
-  --bg-surface: rgb(30, 30, 30);
-  --bg-elevated: rgb(40, 40, 40);
-  --text-primary: rgb(220, 220, 220);
-  --text-dim: rgb(120, 120, 120);
-
-  --font-size-sm: 11px;
-  --font-size-md: 12px;
-  --spacing-sm: 4px;
-  --spacing-md: 8px;
-  --spacing-lg: 12px;
+  --bg:          rgb(26,  26,  26);
+  --surface:     rgb(36,  36,  36);
+  --surface2:    rgb(46,  46,  46);
+  --border:      rgba(255,255,255,0.08);
+  --text:        rgb(220, 220, 220);
+  --text-dim:    rgb(130, 130, 130);
+  --accent:      rgb( 88, 166, 255);
+  --green:       rgb( 63, 185,  80);
+  --red:         rgb(248,  81,  73);
 }
 
+/* ── ROOT ── */
 .root {
-  background-color: var(--bg-surface);
-  padding: var(--spacing-md);
   flex-grow: 1;
+  flex-direction: column;
+  background-color: var(--bg);
+  padding: 6px;
 }
 
-.section {
-  margin-bottom: var(--spacing-lg);
-  border-width: 1px;
-  border-color: rgba(255, 255, 255, 0.08);
-  border-radius: 4px;
-  padding: var(--spacing-md);
-}
-
-.section-title {
-  font-size: var(--font-size-sm);
-  color: var(--text-dim);
-  -unity-font-style: bold;
-  margin-bottom: var(--spacing-sm);
-}
-
-.connection-row {
+/* ── PYTHON SERVER BAR ── */
+.server-bar {
   flex-direction: row;
   align-items: center;
+  background-color: var(--surface);
+  border-radius: 4px;
+  padding: 4px 8px;
+  margin-bottom: 4px;
+  border-width: 1px;
+  border-color: var(--border);
 }
 
-.status-dot {
+.server-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 4px;
+  background-color: var(--text-dim);
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
+.server-dot.running  { background-color: var(--green); }
+.server-dot.starting { background-color: rgb(210, 153, 34); }
+.server-dot.error    { background-color: var(--red); }
+
+.server-text {
+  flex-grow: 1;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.server-btn {
+  font-size: 10px;
+  padding: 2px 8px;
+}
+
+/* ── CONNECTION BAR ── */
+.conn-bar {
+  flex-direction: row;
+  align-items: center;
+  background-color: var(--surface);
+  border-radius: 4px;
+  padding: 5px 8px;
+  margin-bottom: 5px;
+  border-width: 1px;
+  border-color: var(--border);
+}
+
+.conn-dot {
   width: 8px;
   height: 8px;
   border-radius: 4px;
   background-color: var(--text-dim);
+  margin-right: 6px;
+  flex-shrink: 0;
 }
 
-.status-dot.connected {
-  background-color: var(--color-ahbab);
-}
+.conn-dot.connected { background-color: var(--green); }
 
-.connection-text {
+.conn-text {
   flex-grow: 1;
-  margin-left: var(--spacing-sm);
-  font-size: var(--font-size-sm);
-  color: var(--text-primary);
+  font-size: 11px;
+  color: var(--text);
 }
 
-.connect-button {
-  font-size: var(--font-size-sm);
+.conn-btn {
+  font-size: 10px;
+  padding: 2px 8px;
 }
 
-.log-view {
-  max-height: 200px;
-  background-color: var(--bg-elevated);
-  border-radius: 3px;
-}
-
-.log-line {
-  font-size: var(--font-size-sm);
-  padding: 2px var(--spacing-sm);
-  -unity-font-definition: resource("Fonts/RobotoMono");
-}
-
-.command-buttons {
+/* ── AGENT GRID ── */
+.agent-grid {
   flex-direction: row;
   flex-wrap: wrap;
-  justify-content: flex-start;
+  margin-bottom: 5px;
 }
 
-.command-button {
+/* Each AgentStatusCard gets width 50% in C# */
+.agent-card-inner {
+  flex-direction: row;
+  align-items: center;
+  padding: 4px 5px;
+  border-radius: 3px;
+  border-width: 1px;
+  border-color: var(--border);
+  background-color: var(--surface);
   margin: 2px;
-  font-size: var(--font-size-sm);
+}
+
+/* ── CHAT ── */
+.chat-title {
+  font-size: 10px;
+  color: var(--text-dim);
+  -unity-font-style: bold;
+  margin-bottom: 3px;
+}
+
+.chat-scroll {
+  flex-grow: 1;
+  background-color: var(--surface);
+  border-radius: 4px;
+  border-width: 1px;
+  border-color: var(--border);
+  margin-bottom: 5px;
+  min-height: 80px;
+}
+
+.chat-container {
+  padding: 6px;
+  flex-direction: column;
+}
+
+/* User bubble */
+.bubble-user {
+  align-self: flex-end;
+  background-color: rgb(31, 111, 235);
+  border-radius: 8px;
+  border-bottom-right-radius: 2px;
+  padding: 5px 9px;
+  margin-bottom: 6px;
+  max-width: 85%;
+  font-size: 11px;
+  color: rgb(255, 255, 255);
+  white-space: normal;
+}
+
+/* System bubble */
+.bubble-system {
+  align-self: flex-start;
+  background-color: var(--surface2);
+  border-radius: 8px;
+  border-bottom-left-radius: 2px;
+  border-width: 1px;
+  border-color: var(--border);
+  padding: 5px 9px;
+  margin-bottom: 6px;
+  max-width: 92%;
+  font-size: 11px;
+  color: var(--text);
+  white-space: normal;
+}
+
+/* ── INPUT ROW ── */
+.input-row {
+  flex-direction: row;
+  align-items: stretch;
+  margin-bottom: 5px;
+}
+
+.chat-input {
+  flex-grow: 1;
+  font-size: 11px;
+  margin-right: 5px;
+}
+
+.send-btn {
+  font-size: 11px;
+  padding: 0 12px;
+  -unity-font-style: bold;
+}
+
+/* ── QUICK COMMANDS ── */
+.cmd-row {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.cmd-btn {
+  font-size: 10px;
+  padding: 2px 6px;
+  margin-right: 3px;
+  margin-bottom: 2px;
 }

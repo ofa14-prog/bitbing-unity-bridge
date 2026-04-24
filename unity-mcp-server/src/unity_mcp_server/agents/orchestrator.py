@@ -3,7 +3,7 @@ Agent orchestrator - coordinates the 6-agent pipeline.
 Based on KONU.md §4.1 architecture.
 """
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Coroutine, Dict, List, Optional
 
 from .vates import VatesAgent
 from .diafor import DiaforAgent
@@ -149,6 +149,77 @@ class AgentOrchestrator:
                 magnumpus_result
             )
         }]
+
+    async def run_with_progress(
+        self,
+        user_input: str,
+        game_type: str,
+        progress: Callable[[Dict[str, Any]], Coroutine],
+    ) -> None:
+        """Run the full pipeline, emitting progress events to the chat UI."""
+        self._iteration_count = 0
+
+        async def emit(agent_id: str, status: str, message: str) -> None:
+            await progress({"type": "agent_event", "agentId": agent_id, "status": status, "message": message})
+
+        # Phase 1: vates
+        await emit("vates", "running", "Kullanıcı girdisi analiz ediliyor…")
+        vates_result = await self._vates.analyze(user_input, game_type)
+        task_dag = vates_result.get("task_dag", [])
+        await emit("vates", "done", f"{len(task_dag)} görev oluşturuldu")
+
+        # Phase 2: diafor
+        await emit("diafor", "running", "Ortam ve Unity bağlantısı kontrol ediliyor…")
+        diafor_result = await self._diafor.check_environment("unity")
+        if not diafor_result.get("ready", False):
+            await emit("diafor", "error", "Unity bağlantısı kurulamadı")
+            await progress({"type": "pipeline_failed", "reason": "Unity bridge bağlantısı yok — Unity Editor açık mı?"})
+            return
+        await emit("diafor", "done", "Bağlantı doğrulandı")
+
+        # Phase 3: ahbab
+        await emit("ahbab", "running", f"{len(task_dag)} komut Unity'e gönderiliyor…")
+        ahbab_results = []
+        for task in task_dag:
+            result = await self._ahbab.execute_task(task)
+            ahbab_results.append(result)
+        await emit("ahbab", "done", f"{len(ahbab_results)} komut tamamlandı")
+
+        # Phase 4: obsidere
+        await emit("obsidere", "running", "Çıktılar denetleniyor…")
+        obsidere_result = await self._obsidere.monitor(ahbab_results)
+
+        while obsidere_result.get("has_errors", False) and self._iteration_count < self._max_iterations:
+            self._iteration_count += 1
+            await emit("obsidere", "running", f"Hata düzeltme — iterasyon {self._iteration_count}")
+            for correction in obsidere_result.get("corrections", []):
+                await self._ahbab.apply_correction(correction)
+            obsidere_result = await self._obsidere.monitor(ahbab_results)
+
+        error_count = obsidere_result.get("error_count", 0)
+        obs_status = "error" if obsidere_result.get("has_errors") else "done"
+        await emit("obsidere", obs_status, f"{error_count} hata tespit edildi")
+
+        # Phase 5: patientia
+        await emit("patientia", "running", "Build kalitesi puanlanıyor…")
+        patientia_result = await self._patientia.test_and_score(ahbab_results)
+        score = patientia_result.get("score", 0)
+        grade = patientia_result.get("grade", "F")
+        await emit("patientia", "done", f"Puan: {score}/100 — Not: {grade}")
+
+        # Phase 6: magnumpus
+        await emit("magnumpus", "running", "Çıktılar paketleniyor…")
+        magnumpus_result = await self._magnumpus.package(task_dag, ahbab_results, patientia_result)
+        await emit("magnumpus", "done", magnumpus_result.get("delivery_message", "Teslim tamamlandı"))
+
+        await progress({
+            "type": "pipeline_complete",
+            "summary": self._format_pipeline_summary(
+                vates_result, diafor_result, ahbab_results, obsidere_result, patientia_result, magnumpus_result
+            ),
+            "score": score,
+            "grade": grade,
+        })
 
     def _format_task_dag(self, result: Dict[str, Any]) -> str:
         """Format task DAG for display."""

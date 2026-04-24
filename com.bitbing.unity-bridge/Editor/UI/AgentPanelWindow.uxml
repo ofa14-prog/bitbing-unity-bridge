@@ -1,39 +1,43 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements">
   <ui:VisualElement class="root">
 
-    <ui:VisualElement class="section connection-section">
-      <ui:Label text="BAĞLANTI" class="section-title"/>
-      <ui:VisualElement class="connection-row">
-        <ui:VisualElement class="status-dot" name="connectionDot"/>
-        <ui:Label name="connectionLabel" text="Bağlı değil" class="connection-text"/>
-        <ui:Button name="connectButton" text="Bağlan" class="connect-button"/>
-      </ui:VisualElement>
+    <!-- Python server bar -->
+    <ui:VisualElement class="server-bar">
+      <ui:VisualElement name="serverDot" class="server-dot"/>
+      <ui:Label name="serverLabel" text="Python sunucu kontrol ediliyor…" class="server-text"/>
+      <ui:Button name="serverButton" text="Başlat" class="server-btn"/>
     </ui:VisualElement>
 
-    <ui:VisualElement class="section agents-section">
-      <ui:Label text="AGENT DURUMLARI" class="section-title"/>
-      <ui:VisualElement name="agentCardsContainer"/>
+    <!-- Unity bridge connection bar -->
+    <ui:VisualElement class="conn-bar">
+      <ui:VisualElement name="connectionDot" class="conn-dot"/>
+      <ui:Label name="connectionLabel" text="Bağlı değil" class="conn-text"/>
+      <ui:Button name="connectButton" text="Bağlan" class="conn-btn"/>
     </ui:VisualElement>
 
-    <ui:VisualElement class="section log-section">
-      <ui:VisualElement class="section-header">
-        <ui:Label text="LOG AKIŞI" class="section-title"/>
-        <ui:Button name="clearLogsButton" text="Temizle" class="clear-button"/>
-      </ui:VisualElement>
-      <ui:ScrollView name="logScrollView" class="log-view">
-        <ui:VisualElement name="logContainer"/>
-      </ui:ScrollView>
+    <!-- Agent status grid (2 columns x 3 rows) -->
+    <ui:VisualElement name="agentCardsContainer" class="agent-grid"/>
+
+    <!-- Chat section (grows to fill remaining space) -->
+    <ui:Label text="CHAT" class="chat-title"/>
+    <ui:ScrollView name="chatScrollView" class="chat-scroll">
+      <ui:VisualElement name="chatContainer" class="chat-container"/>
+    </ui:ScrollView>
+
+    <!-- Prompt input row -->
+    <ui:VisualElement class="input-row">
+      <ui:TextField name="chatInput" class="chat-input"/>
+      <ui:Button name="sendButton" text="Gönder" class="send-btn"/>
     </ui:VisualElement>
 
-    <ui:VisualElement class="section commands-section">
-      <ui:Label text="HIZLI KOMUTLAR" class="section-title"/>
-      <ui:VisualElement class="command-buttons">
-        <ui:Button name="playButton" text="▶ Play Mode" class="command-button"/>
-        <ui:Button name="stopButton" text="⏹ Stop" class="command-button"/>
-        <ui:Button name="screenshotButton" text="📸 Ekran Al" class="command-button"/>
-        <ui:Button name="refreshButton" text="🔄 Refresh" class="command-button"/>
-        <ui:Button name="clearConsoleButton" text="🧹 Clear Console" class="command-button"/>
-      </ui:VisualElement>
+    <!-- Quick command buttons -->
+    <ui:VisualElement class="cmd-row">
+      <ui:Button name="playButton"         text="▶"  class="cmd-btn"/>
+      <ui:Button name="stopButton"         text="⏹"  class="cmd-btn"/>
+      <ui:Button name="screenshotButton"   text="📸" class="cmd-btn"/>
+      <ui:Button name="refreshButton"      text="🔄" class="cmd-btn"/>
+      <ui:Button name="clearLogsButton"    text="🧹" class="cmd-btn"/>
+      <ui:Button name="clearConsoleButton" text="C"  class="cmd-btn"/>
     </ui:VisualElement>
 
   </ui:VisualElement>

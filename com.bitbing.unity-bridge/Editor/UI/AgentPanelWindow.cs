@@ -1,56 +1,105 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Net.Sockets;
+using System.Net.Http;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.UIElements;
 using UnityEditor;
 using BitBing.UnityBridge.Editor.Settings;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using Debug = UnityEngine.Debug;
 
 namespace BitBing.UnityBridge.Editor.UI
 {
     /// <summary>
-    /// Main EditorWindow for the BitBing Platform panel.
-    /// Provides UI for monitoring agent status, viewing logs, and sending commands.
+    /// Main EditorWindow — chat UI that drives the 6-agent pipeline.
+    /// Prompt → Python chat server (/api/run NDJSON stream) → agent cards update live.
     /// Based on EKLENTİR.md §8.
     /// </summary>
     public class AgentPanelWindow : EditorWindow
     {
+        // ── bridge
         private McpListener _mcpListener;
         private BridgeSettings _settings;
+
+        // ── UI roots
         private VisualElement _root;
         private VisualElement _connectionDot;
         private Label _connectionLabel;
         private Button _connectButton;
         private VisualElement _agentCardsContainer;
-        private VisualElement _logContainer;
-        private ScrollView _logScrollView;
-        private Dictionary<string, AgentStatusCard> _agentCards;
 
-        private static readonly Color ColorVates = new Color(1f, 59f / 255f, 59f / 255f);
-        private static readonly Color ColorDiafor = new Color(1f, 214f / 255f, 0);
-        private static readonly Color ColorAhbab = new Color(0, 230f / 255f, 118f / 255f);
-        private static readonly Color ColorObsidere = new Color(41f / 255f, 121f / 255f, 1f);
-        private static readonly Color ColorPatientia = new Color(170f / 255f, 0, 1f);
-        private static readonly Color ColorMagnumpus = new Color(1f, 109f / 255f, 0);
+        // ── Python server UI
+        private VisualElement _serverDot;
+        private Label _serverLabel;
+        private Button _serverButton;
+
+        // ── chat UI
+        private ScrollView _chatScrollView;
+        private VisualElement _chatContainer;
+        private TextField _chatInput;
+        private Button _sendButton;
+
+        // ── agent cards (key = lowercase agentId)
+        private readonly Dictionary<string, AgentStatusCard> _agentCards = new();
+
+        // ── thread-safe main-thread action queue
+        private readonly ConcurrentQueue<Action> _mainQueue = new();
+        private CancellationTokenSource _pipelineCts;
+
+        // ── Python server process
+        private Process _serverProcess;
+        private const int ChatServerPort = 8001;
+
+        // ── colors
+        private static readonly Color ColorVates     = new(1f,   59/255f, 59/255f);
+        private static readonly Color ColorDiafor    = new(1f,  214/255f,   0);
+        private static readonly Color ColorAhbab     = new(0,   230/255f, 118/255f);
+        private static readonly Color ColorObsidere  = new(41/255f, 121/255f, 1f);
+        private static readonly Color ColorPatientia = new(170/255f,  0,  1f);
+        private static readonly Color ColorMagnumpus = new(1f,  109/255f,  0);
+
+        private const string PythonChatUrl = "http://127.0.0.1:8001/api/run";
 
         [MenuItem("Window/BitBing/Agent Panel %#g")]
         public static void ShowWindow()
         {
-            var window = GetWindow<AgentPanelWindow>("BitBing");
-            window.minSize = new Vector2(300, 400);
-            window.Show();
+            var w = GetWindow<AgentPanelWindow>("BitBing");
+            w.minSize = new Vector2(320, 420);
+            w.Show();
         }
 
         public void OnEnable()
         {
             _settings = BridgeSettings.GetOrCreate();
-            _agentCards = new Dictionary<string, AgentStatusCard>();
+            _agentCards.Clear();
 
-            CreateUI();
+            BuildUI();
             InitializeMcpListener();
+            EditorApplication.update += DrainMainQueue;
+
+            // Auto-start Python server after first frame to avoid init-time issues
+            EditorApplication.delayCall += CheckAndStartServer;
         }
 
         public void OnDisable()
         {
+            EditorApplication.update -= DrainMainQueue;
+
+            _pipelineCts?.Cancel();
+            _pipelineCts = null;
+
+            // Release the process handle (don't kill — let server keep running)
+            _serverProcess?.Dispose();
+            _serverProcess = null;
+
             if (_mcpListener != null)
             {
                 _mcpListener.OnLog -= OnLogReceived;
@@ -61,238 +110,461 @@ namespace BitBing.UnityBridge.Editor.UI
             }
         }
 
-        private void CreateUI()
+        // ── MAIN-THREAD DRAIN ──────────────────────────────────────────────
+        private void DrainMainQueue()
+        {
+            while (_mainQueue.TryDequeue(out var action))
+                action?.Invoke();
+        }
+
+        // ── UI BUILD ──────────────────────────────────────────────────────
+        private void BuildUI()
         {
             const string uxmlPath = "Packages/com.bitbing.unity-bridge/Editor/UI/AgentPanelWindow.uxml";
-            const string ussPath = "Packages/com.bitbing.unity-bridge/Editor/UI/AgentPanelWindow.uss";
+            const string ussPath  = "Packages/com.bitbing.unity-bridge/Editor/UI/AgentPanelWindow.uss";
 
             var template = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(uxmlPath);
-
-            if (template == null)
-            {
-                CreateDefaultUI();
-                return;
-            }
+            if (template == null) { BuildFallbackUI(); return; }
 
             _root = template.CloneTree();
             rootVisualElement.Add(_root);
+
             var styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(ussPath);
             if (styleSheet != null) rootVisualElement.styleSheets.Add(styleSheet);
 
-            SetupReferences();
-            SetupAgentCards();
-            SetupButtons();
+            BindReferences();
+            PopulateAgentCards();
+            BindButtons();
         }
 
-        private void CreateDefaultUI()
+        private void BindReferences()
         {
-            _root = new VisualElement();
-            _root.style.flexGrow = 1;
-            _root.style.backgroundColor = new Color(0.12f, 0.12f, 0.12f);
-            _root.style.paddingLeft = 8;
-            _root.style.paddingRight = 8;
-            _root.style.paddingTop = 8;
-            _root.style.paddingBottom = 8;
+            _serverDot          = _root.Q<VisualElement>("serverDot");
+            _serverLabel        = _root.Q<Label>("serverLabel");
+            _serverButton       = _root.Q<Button>("serverButton");
+            _connectionDot      = _root.Q<VisualElement>("connectionDot");
+            _connectionLabel    = _root.Q<Label>("connectionLabel");
+            _connectButton      = _root.Q<Button>("connectButton");
+            _agentCardsContainer = _root.Q<VisualElement>("agentCardsContainer");
 
-            rootVisualElement.Add(_root);
-
-            CreateConnectionSection();
-            CreateAgentSection();
-            CreateLogSection();
-            CreateCommandsSection();
-        }
-
-        private void SetupReferences()
-        {
-            _connectionDot = _root.Query<VisualElement>("connectionDot");
-            _connectionLabel = _root.Query<Label>("connectionLabel");
-            _connectButton = _root.Query<Button>("connectButton");
-            _agentCardsContainer = _root.Query<VisualElement>("agentCardsContainer");
-            _logContainer = _root.Query<VisualElement>("logContainer");
-            _logScrollView = _root.Query<ScrollView>("logScrollView");
+            if (_serverButton != null)
+                _serverButton.clicked += OnServerButtonClicked;
+            _chatScrollView     = _root.Q<ScrollView>("chatScrollView");
+            _chatContainer      = _root.Q<VisualElement>("chatContainer");
+            _chatInput          = _root.Q<TextField>("chatInput");
+            _sendButton         = _root.Q<Button>("sendButton");
 
             if (_connectButton != null)
+                _connectButton.clicked += OnConnectClicked;
+
+            if (_sendButton != null)
+                _sendButton.clicked += OnSend;
+
+            if (_chatInput != null)
             {
-                _connectButton.clicked += OnConnectButtonClicked;
+                _chatInput.RegisterCallback<KeyDownEvent>(e =>
+                {
+                    if (e.keyCode == KeyCode.Return)
+                    {
+                        OnSend();
+                        e.StopPropagation();
+                    }
+                });
             }
         }
 
-        private void SetupAgentCards()
+        private void PopulateAgentCards()
         {
-            CreateAgentCard("vates", ColorVates, "Kullanıcı inputunu analiz eder");
-            CreateAgentCard("Diafor", ColorDiafor, "Bağımlılıkları kontrol eder");
-            CreateAgentCard("ahbab", ColorAhbab, "Unity'ye komut gönderir");
-            CreateAgentCard("obsidere", ColorObsidere, "Çıktıları denetler");
-            CreateAgentCard("patientia", ColorPatientia, "Testleri yapıyor");
-            CreateAgentCard("magnumpus", ColorMagnumpus, "Çıktıları paketliyor");
+            AddAgentCard("vates",     ColorVates,     "Girdi analizi → Görev DAG");
+            AddAgentCard("diafor",    ColorDiafor,    "Bağımlılık & bağlantı");
+            AddAgentCard("ahbab",     ColorAhbab,     "Unity komut uygulayıcı");
+            AddAgentCard("obsidere",  ColorObsidere,  "Hata denetimi");
+            AddAgentCard("patientia", ColorPatientia, "Build puanlama");
+            AddAgentCard("magnumpus", ColorMagnumpus, "Paketleme & teslimat");
         }
 
-        private void CreateAgentCard(string agentId, Color color, string description)
+        private void AddAgentCard(string agentId, Color color, string description)
         {
             var card = new AgentStatusCard(agentId, color, description);
+            // 2-column grid: each card ~50% width
+            card.style.width = new StyleLength(Length.Percent(49));
             _agentCards[agentId] = card;
             _agentCardsContainer?.Add(card);
         }
 
-        private void SetupButtons()
+        private void BindButtons()
         {
-            var playButton = _root.Q<Button>("playButton");
-            var stopButton = _root.Q<Button>("stopButton");
-            var screenshotButton = _root.Q<Button>("screenshotButton");
-            var refreshButton = _root.Q<Button>("refreshButton");
-            var clearConsoleButton = _root.Q<Button>("clearConsoleButton");
-            var clearLogsButton = _root.Q<Button>("clearLogsButton");
+            var play           = _root.Q<Button>("playButton");
+            var stop           = _root.Q<Button>("stopButton");
+            var screenshot     = _root.Q<Button>("screenshotButton");
+            var refresh        = _root.Q<Button>("refreshButton");
+            var clearLogs      = _root.Q<Button>("clearLogsButton");
+            var clearConsole   = _root.Q<Button>("clearConsoleButton");
 
-            if (playButton != null) playButton.clicked += () => ExecuteCommand("enter_play_mode");
-            if (stopButton != null) stopButton.clicked += () => ExecuteCommand("exit_play_mode");
-            if (screenshotButton != null) screenshotButton.clicked += OnTakeScreenshot;
-            if (refreshButton != null) refreshButton.clicked += OnRefreshAssets;
-            if (clearConsoleButton != null) clearConsoleButton.clicked += OnClearConsole;
-            if (clearLogsButton != null) clearLogsButton.clicked += OnClearLogs;
+            if (play != null)         play.clicked         += OnEnterPlayMode;
+            if (stop != null)         stop.clicked         += OnExitPlayMode;
+            if (screenshot != null)   screenshot.clicked   += OnTakeScreenshot;
+            if (refresh != null)      refresh.clicked      += OnRefreshAssets;
+            if (clearLogs != null)    clearLogs.clicked    += OnClearChat;
+            if (clearConsole != null) clearConsole.clicked += OnClearConsole;
         }
 
-        private void CreateConnectionSection()
+        // ── CHAT: SEND ────────────────────────────────────────────────────
+        private void OnSend()
         {
-            var section = new VisualElement();
-            section.style.marginBottom = 8;
-            section.style.paddingLeft = 8;
-            section.style.paddingRight = 8;
-            section.style.paddingTop = 4;
-            section.style.paddingBottom = 4;
-            section.style.backgroundColor = new Color(0.15f, 0.15f, 0.15f);
-            section.style.borderTopLeftRadius = 4;
-            section.style.borderTopRightRadius = 4;
-            section.style.borderBottomLeftRadius = 4;
-            section.style.borderBottomRightRadius = 4;
+            if (_chatInput == null) return;
+            var prompt = _chatInput.value?.Trim();
+            if (string.IsNullOrEmpty(prompt)) return;
 
-            var title = new Label("BAĞLANTI");
-            title.style.fontSize = 10;
-            title.style.color = new Color(0.5f, 0.5f, 0.5f);
-            title.style.unityFontStyleAndWeight = FontStyle.Bold;
-            section.Add(title);
+            _chatInput.value = string.Empty;
+            AddBubble(prompt, isUser: true);
+            ResetAgentCards();
+            SetSendEnabled(false);
 
-            var row = new VisualElement();
-            row.style.flexDirection = FlexDirection.Row;
-            row.style.alignItems = Align.Center;
-
-            _connectionDot = new VisualElement();
-            _connectionDot.style.width = 8;
-            _connectionDot.style.height = 8;
-            _connectionDot.style.borderTopLeftRadius = 4;
-            _connectionDot.style.borderTopRightRadius = 4;
-            _connectionDot.style.borderBottomLeftRadius = 4;
-            _connectionDot.style.borderBottomRightRadius = 4;
-            _connectionDot.style.backgroundColor = new Color(0.5f, 0.5f, 0.5f);
-            row.Add(_connectionDot);
-
-            _connectionLabel = new Label("Bağlı değil");
-            _connectionLabel.style.flexGrow = 1;
-            _connectionLabel.style.marginLeft = 8;
-            _connectionLabel.style.fontSize = 11;
-            _connectionLabel.style.color = Color.white;
-            row.Add(_connectionLabel);
-
-            _connectButton = new Button(OnConnectButtonClicked);
-            _connectButton.text = "Bağlan";
-            _connectButton.style.fontSize = 10;
-            row.Add(_connectButton);
-
-            section.Add(row);
-            _root.Add(section);
+            _pipelineCts?.Cancel();
+            _pipelineCts = new CancellationTokenSource();
+            _ = RunPipelineAsync(prompt, _pipelineCts.Token);
         }
 
-        private void CreateAgentSection()
+        private async Task RunPipelineAsync(string prompt, CancellationToken ct)
         {
-            var section = new VisualElement();
-            section.style.marginBottom = 8;
+            try
+            {
+                using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+                var payload = JsonConvert.SerializeObject(new { prompt, gameType = "2D Platformer" });
+                var content = new StringContent(payload, Encoding.UTF8, "application/json");
 
-            var title = new Label("AGENT DURUMLARI");
-            title.style.fontSize = 10;
-            title.style.color = new Color(0.5f, 0.5f, 0.5f);
-            title.style.unityFontStyleAndWeight = FontStyle.Bold;
-            section.Add(title);
+                HttpResponseMessage response;
+                try
+                {
+                    response = await client.PostAsync(PythonChatUrl, content, ct);
+                }
+                catch (Exception ex)
+                {
+                    Enqueue(() => AddBubble($"❌ Python sunucusuna bağlanılamadı: {ex.Message}\n\nÖnce 'unity-mcp-chat' komutunu çalıştır.", isUser: false));
+                    Enqueue(() => SetSendEnabled(true));
+                    return;
+                }
 
-            _agentCardsContainer = new VisualElement();
-            _agentCardsContainer.style.flexDirection = FlexDirection.Column;
-            section.Add(_agentCardsContainer);
+                using var stream = await response.Content.ReadAsStreamAsync();
+                using var reader = new StreamReader(stream, Encoding.UTF8);
 
-            _root.Add(section);
+                while (!reader.EndOfStream && !ct.IsCancellationRequested)
+                {
+                    var line = await reader.ReadLineAsync();
+                    if (!string.IsNullOrWhiteSpace(line))
+                        HandleStreamLine(line);
+                }
+            }
+            catch (OperationCanceledException) { /* window closed or new send */ }
+            catch (Exception ex)
+            {
+                Enqueue(() => AddBubble($"❌ Hata: {ex.Message}", isUser: false));
+            }
+            finally
+            {
+                Enqueue(() => SetSendEnabled(true));
+            }
         }
 
-        private void CreateLogSection()
+        private void HandleStreamLine(string json)
         {
-            var section = new VisualElement();
-            section.style.marginBottom = 8;
+            JObject obj;
+            try { obj = JObject.Parse(json); }
+            catch { return; }
 
-            var header = new VisualElement();
-            header.style.flexDirection = FlexDirection.Row;
-            header.style.alignItems = Align.Center;
+            var type = obj["type"]?.ToString();
+            switch (type)
+            {
+                case "agent_event":
+                    var id      = obj["agentId"]?.ToString() ?? "";
+                    var status  = obj["status"]?.ToString() ?? "";
+                    var message = obj["message"]?.ToString() ?? "";
+                    Enqueue(() => UpdateAgentCard(id, status, message));
+                    break;
 
-            var title = new Label("LOG AKIŞI");
-            title.style.fontSize = 10;
-            title.style.color = new Color(0.5f, 0.5f, 0.5f);
-            title.style.unityFontStyleAndWeight = FontStyle.Bold;
-            header.Add(title);
+                case "pipeline_complete":
+                    var score   = (int)(obj["score"] ?? 0);
+                    var grade   = obj["grade"]?.ToString() ?? "?";
+                    var summary = obj["summary"]?.ToString() ?? "";
+                    Enqueue(() => AddBubble($"✅ Puan: {score}/100 ({grade})\n\n{summary}", isUser: false));
+                    break;
 
-            var clearButton = new Button(OnClearLogs);
-            clearButton.text = "Temizle";
-            clearButton.style.fontSize = 10;
-            clearButton.style.marginLeft = 4;
-            header.Add(clearButton);
-
-            section.Add(header);
-
-            _logScrollView = new ScrollView();
-            _logScrollView.style.flexGrow = 1;
-            _logScrollView.style.maxHeight = 200;
-            _logScrollView.style.backgroundColor = new Color(0.1f, 0.1f, 0.1f);
-            _logScrollView.style.borderTopLeftRadius = 3;
-            _logScrollView.style.borderTopRightRadius = 3;
-            _logScrollView.style.borderBottomLeftRadius = 3;
-            _logScrollView.style.borderBottomRightRadius = 3;
-
-            _logContainer = new VisualElement();
-            _logScrollView.Add(_logContainer);
-            section.Add(_logScrollView);
-
-            _root.Add(section);
+                case "pipeline_failed":
+                    var reason = obj["reason"]?.ToString() ?? "Bilinmeyen hata";
+                    Enqueue(() => AddBubble($"❌ Pipeline başarısız: {reason}", isUser: false));
+                    break;
+            }
         }
 
-        private void CreateCommandsSection()
+        // ── AGENT CARD UPDATES ────────────────────────────────────────────
+        private void UpdateAgentCard(string agentId, string status, string message)
         {
-            var section = new VisualElement();
-            section.style.marginBottom = 8;
+            if (!_agentCards.TryGetValue(agentId, out var card))
+            {
+                // Case-insensitive fallback (e.g. "Diafor" vs "diafor")
+                foreach (var kvp in _agentCards)
+                {
+                    if (string.Equals(kvp.Key, agentId, StringComparison.OrdinalIgnoreCase))
+                    { card = kvp.Value; break; }
+                }
+            }
+            if (card == null) return;
 
-            var title = new Label("HIZLI KOMUTLAR");
-            title.style.fontSize = 10;
-            title.style.color = new Color(0.5f, 0.5f, 0.5f);
-            title.style.unityFontStyleAndWeight = FontStyle.Bold;
-            section.Add(title);
-
-            var buttons = new VisualElement();
-            buttons.style.flexDirection = FlexDirection.Row;
-            buttons.style.flexWrap = Wrap.Wrap;
-
-            AddCommandButton(buttons, "▶ Play Mode", OnEnterPlayMode);
-            AddCommandButton(buttons, "⏹ Stop", OnExitPlayMode);
-            AddCommandButton(buttons, "📸 Ekran Al", OnTakeScreenshot);
-            AddCommandButton(buttons, "🔄 Refresh", OnRefreshAssets);
-            AddCommandButton(buttons, "🧹 Clear Console", OnClearConsole);
-
-            section.Add(buttons);
-            _root.Add(section);
+            switch (status)
+            {
+                case "running": card.SetRunning(message); break;
+                case "done":    card.SetSuccess(message); break;
+                case "error":   card.SetError(message);   break;
+                default:        card.SetIdle(message);    break;
+            }
         }
 
-        private void AddCommandButton(VisualElement container, string text, Action callback)
+        private void ResetAgentCards()
         {
-            var button = new Button(callback);
-            button.text = text;
-            button.style.fontSize = 10;
-            button.style.marginRight = 4;
-            button.style.marginBottom = 4;
-            container.Add(button);
+            foreach (var card in _agentCards.Values)
+                card.SetIdle();
         }
 
+        // ── CHAT BUBBLE ───────────────────────────────────────────────────
+        private void AddBubble(string text, bool isUser)
+        {
+            if (_chatContainer == null) return;
+
+            var bubble = new Label(text);
+            bubble.style.whiteSpace = WhiteSpace.Normal;
+            bubble.style.fontSize = 11;
+            bubble.style.paddingTop = 5;
+            bubble.style.paddingBottom = 5;
+            bubble.style.paddingLeft = 9;
+            bubble.style.paddingRight = 9;
+            bubble.style.marginBottom = 6;
+            bubble.style.borderTopLeftRadius     = 8;
+            bubble.style.borderTopRightRadius    = 8;
+            bubble.style.borderBottomLeftRadius  = isUser ? 8 : 2;
+            bubble.style.borderBottomRightRadius = isUser ? 2 : 8;
+
+            if (isUser)
+            {
+                bubble.style.alignSelf = Align.FlexEnd;
+                bubble.style.backgroundColor = new Color(0.12f, 0.44f, 0.92f);
+                bubble.style.color = Color.white;
+                bubble.style.maxWidth = new StyleLength(Length.Percent(85));
+            }
+            else
+            {
+                bubble.style.alignSelf = Align.FlexStart;
+                bubble.style.backgroundColor = new Color(0.18f, 0.18f, 0.18f);
+                bubble.style.color = new Color(0.86f, 0.86f, 0.86f);
+                bubble.style.borderTopWidth    = 1;
+                bubble.style.borderBottomWidth = 1;
+                bubble.style.borderLeftWidth   = 1;
+                bubble.style.borderRightWidth  = 1;
+                bubble.style.borderTopColor    = new Color(1f, 1f, 1f, 0.08f);
+                bubble.style.borderBottomColor = new Color(1f, 1f, 1f, 0.08f);
+                bubble.style.borderLeftColor   = new Color(1f, 1f, 1f, 0.08f);
+                bubble.style.borderRightColor  = new Color(1f, 1f, 1f, 0.08f);
+                bubble.style.maxWidth = new StyleLength(Length.Percent(92));
+            }
+
+            _chatContainer.Add(bubble);
+
+            if (_chatScrollView?.panel != null)
+            {
+                try { _chatScrollView.ScrollTo(bubble); }
+                catch (NullReferenceException) { }
+            }
+        }
+
+        private void SetSendEnabled(bool enabled)
+        {
+            if (_sendButton != null) _sendButton.SetEnabled(enabled);
+        }
+
+        // ── MAIN-QUEUE HELPER ────────────────────────────────────────────
+        private void Enqueue(Action action) => _mainQueue.Enqueue(action);
+
+        // ── PYTHON SERVER MANAGEMENT ─────────────────────────────────────
+
+        private void CheckAndStartServer()
+        {
+            if (IsServerRunning())
+            {
+                SetServerUI("running", "Çalışıyor — localhost:" + ChatServerPort, "Durdur");
+                return;
+            }
+            StartPythonServer();
+        }
+
+        private void OnServerButtonClicked()
+        {
+            if (_serverButton == null) return;
+            if (_serverButton.text == "Durdur")
+                StopPythonServer();
+            else
+                StartPythonServer();
+        }
+
+        private void StartPythonServer()
+        {
+            SetServerUI("starting", "Başlatılıyor…", "—");
+
+            var (exe, args, workDir) = FindServerCommand();
+
+            if (exe == null)
+            {
+                var hint = FindPythonServerDir() is { } dir
+                    ? $"Kur: cd \"{dir}\" && pip install -e ."
+                    : "unity-mcp-chat bulunamadı — pip install -e . çalıştır";
+                SetServerUI("error", hint, "Tekrar Dene");
+                return;
+            }
+
+            try
+            {
+                var info = new ProcessStartInfo
+                {
+                    FileName = exe,
+                    Arguments = args,
+                    WorkingDirectory = workDir ?? "",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                };
+
+                _serverProcess?.Dispose();
+                _serverProcess = new Process { StartInfo = info, EnableRaisingEvents = true };
+
+                _serverProcess.Exited += (_, __) =>
+                {
+                    Enqueue(() => SetServerUI("error", "Sunucu durdu", "Başlat"));
+                    _serverProcess?.Dispose();
+                    _serverProcess = null;
+                };
+
+                _serverProcess.Start();
+
+                // Check after 2.5 s whether it actually came up
+                Task.Delay(2500).ContinueWith(_ =>
+                {
+                    bool up = IsServerRunning();
+                    Enqueue(() => SetServerUI(
+                        up ? "running" : "error",
+                        up ? "Çalışıyor — localhost:" + ChatServerPort : "Başlatılamadı",
+                        up ? "Durdur" : "Tekrar Dene"));
+                });
+            }
+            catch (Exception ex)
+            {
+                SetServerUI("error", $"Hata: {ex.Message}", "Tekrar Dene");
+            }
+        }
+
+        private void StopPythonServer()
+        {
+            try
+            {
+                if (_serverProcess != null && !_serverProcess.HasExited)
+                {
+                    _serverProcess.Kill();
+                    _serverProcess.Dispose();
+                    _serverProcess = null;
+                }
+            }
+            catch { /* already gone */ }
+            SetServerUI("", "Durduruldu", "Başlat");
+        }
+
+        private void SetServerUI(string dotState, string labelText, string buttonText)
+        {
+            if (_serverDot != null)
+            {
+                _serverDot.RemoveFromClassList("running");
+                _serverDot.RemoveFromClassList("starting");
+                _serverDot.RemoveFromClassList("error");
+                if (!string.IsNullOrEmpty(dotState))
+                    _serverDot.AddToClassList(dotState);
+
+                // Fallback: also set inline color for non-USS layouts
+                _serverDot.style.backgroundColor = dotState switch
+                {
+                    "running"  => new Color(0.25f, 0.73f, 0.31f),
+                    "starting" => new Color(0.82f, 0.60f, 0.13f),
+                    "error"    => new Color(0.97f, 0.32f, 0.29f),
+                    _          => new Color(0.4f, 0.4f, 0.4f),
+                };
+            }
+            if (_serverLabel != null) _serverLabel.text = labelText;
+            if (_serverButton != null) _serverButton.text = buttonText;
+        }
+
+        private bool IsServerRunning()
+        {
+            try
+            {
+                using var tcp = new TcpClient();
+                var ar = tcp.BeginConnect("127.0.0.1", ChatServerPort, null, null);
+                bool ok = ar.AsyncWaitHandle.WaitOne(400);
+                if (ok) tcp.EndConnect(ar);
+                return ok;
+            }
+            catch { return false; }
+        }
+
+        /// <summary>Returns (exe, args, workingDir) or (null,_,_) if not found.</summary>
+        private (string exe, string args, string workDir) FindServerCommand()
+        {
+            // 1) unity-mcp-chat installed by pip (preferred)
+            if (ExistsInPath("unity-mcp-chat"))
+                return ("unity-mcp-chat", "", null);
+
+            // 2) python -m uvicorn from detected server directory
+            var serverDir = FindPythonServerDir();
+            if (serverDir != null)
+            {
+                var python = ExistsInPath("python3") ? "python3"
+                           : ExistsInPath("python")  ? "python"
+                           : null;
+                if (python != null)
+                    return (python,
+                            "-m uvicorn unity_mcp_server.chat_server:app --host 127.0.0.1 --port 8001",
+                            Path.Combine(serverDir, "src"));
+            }
+
+            return (null, null, null);
+        }
+
+        private static string FindPythonServerDir()
+        {
+            // Walk up from Assets/ looking for the sibling unity-mcp-server directory
+            var dir = new DirectoryInfo(Application.dataPath);
+            for (int i = 0; i < 7; i++)
+            {
+                dir = dir.Parent;
+                if (dir == null) break;
+                var candidate = Path.Combine(dir.FullName, "unity-mcp-server");
+                if (Directory.Exists(candidate) &&
+                    File.Exists(Path.Combine(candidate, "pyproject.toml")))
+                    return candidate;
+            }
+            return null;
+        }
+
+        private static bool ExistsInPath(string command)
+        {
+            var pathEnv = Environment.GetEnvironmentVariable("PATH") ?? "";
+            var exts = new[] { "", ".exe", ".cmd", ".bat" };
+            foreach (var dir in pathEnv.Split(Path.PathSeparator))
+            {
+                foreach (var ext in exts)
+                {
+                    if (File.Exists(Path.Combine(dir, command + ext)))
+                        return true;
+                }
+            }
+            return false;
+        }
+
+        // ── MCP LISTENER ─────────────────────────────────────────────────
         private void InitializeMcpListener()
         {
             _mcpListener = new McpListener(_settings.mcpPort);
@@ -306,7 +578,7 @@ namespace BitBing.UnityBridge.Editor.UI
             }
         }
 
-        private void OnConnectButtonClicked()
+        private void OnConnectClicked()
         {
             if (_mcpListener.IsRunning)
             {
@@ -324,123 +596,211 @@ namespace BitBing.UnityBridge.Editor.UI
         {
             if (_connectionDot != null)
             {
-                _connectionDot.style.backgroundColor = connected ? ColorAhbab : new Color(0.5f, 0.5f, 0.5f);
+                _connectionDot.style.backgroundColor = connected ? ColorAhbab : new Color(0.4f, 0.4f, 0.4f);
+                if (connected)
+                    _connectionDot.AddToClassList("connected");
+                else
+                    _connectionDot.RemoveFromClassList("connected");
             }
-
             if (_connectionLabel != null)
-            {
                 _connectionLabel.text = connected ? $"Bağlı — localhost:{_settings.mcpPort}" : "Bağlı değil";
-            }
-
             if (_connectButton != null)
-            {
                 _connectButton.text = connected ? "Kes" : "Bağlan";
-            }
         }
 
         private void OnLogReceived(string source, string message)
         {
-            // Drop logs once the window is being torn down — the ScrollView's
-            // internal state goes null during OnDisable and ScrollTo then NREs.
             if (rootVisualElement == null || rootVisualElement.panel == null) return;
-            if (_settings != null && !_settings.logVerbose && message.Contains("Heartbeat")) return;
-            if (_logContainer == null) return;
-
-            var logLine = new VisualElement();
-            logLine.style.flexDirection = FlexDirection.Row;
-            logLine.style.paddingTop = 2;
-            logLine.style.paddingBottom = 2;
-            logLine.style.paddingLeft = 4;
-            logLine.style.paddingRight = 4;
-
-            var timestamp = new Label(DateTime.Now.ToString("HH:mm:ss"));
-            timestamp.style.fontSize = 9;
-            timestamp.style.color = new Color(0.4f, 0.4f, 0.4f);
-            timestamp.style.marginRight = 4;
-            logLine.Add(timestamp);
-
-            var msg = new Label($"[{source}] {message}");
-            msg.style.fontSize = 10;
-            msg.style.color = Color.white;
-            msg.style.whiteSpace = WhiteSpace.Normal;
-            logLine.Add(msg);
-
-            _logContainer.Add(logLine);
-
-            while (_logContainer.childCount > 100)
-            {
-                _logContainer.RemoveAt(0);
-            }
-
-            if (_logScrollView != null && _logScrollView.panel != null)
-            {
-                try { _logScrollView.ScrollTo(logLine); }
-                catch (NullReferenceException) { /* UI torn down mid-scroll */ }
-            }
+            // Logs go to Unity console only — no separate log panel in new layout
         }
 
         private void OnMessageProcessed(McpMessage message, McpResponse response)
         {
-            var logEntry = $"MCP: {message.Method} → {(response.Error != null ? "ERROR" : "OK")}";
-            OnLogReceived("MCP", logEntry);
+            var entry = $"MCP: {message.Method} → {(response.Error != null ? "HATA" : "OK")}";
+            Debug.Log($"[BitBing] {entry}");
         }
 
-        private void ExecuteCommand(string command)
-        {
-            OnLogReceived("Command", $"Executed: {command}");
-
-            switch (command)
-            {
-                case "enter_play_mode":
-                    OnEnterPlayMode();
-                    break;
-                case "exit_play_mode":
-                    OnExitPlayMode();
-                    break;
-            }
-        }
-
+        // ── QUICK COMMANDS ────────────────────────────────────────────────
         private void OnEnterPlayMode()
         {
-            var cmd = new Commands.EnterPlayModeCommand();
-            var result = cmd.Execute();
-            OnLogReceived("PlayMode", result.Success ? "Play Mode başlatıldı" : $"Hata: {result.Error}");
+            var result = new Commands.EnterPlayModeCommand().Execute();
+            Debug.Log($"[BitBing] Play Mode: {(result.Success ? "başlatıldı" : result.Error)}");
         }
 
         private void OnExitPlayMode()
         {
-            var cmd = new Commands.ExitPlayModeCommand();
-            var result = cmd.Execute();
-            OnLogReceived("PlayMode", result.Success ? "Play Mode durduruldu" : $"Hata: {result.Error}");
+            var result = new Commands.ExitPlayModeCommand().Execute();
+            Debug.Log($"[BitBing] Stop: {(result.Success ? "durduruldu" : result.Error)}");
         }
 
         private void OnTakeScreenshot()
         {
             var path = $"{_settings.screenshotDir}/screenshot_{DateTime.Now:yyyyMMdd_HHmmss}.png";
-            var cmd = new Commands.TakeScreenshotCommand(path);
-            var result = cmd.Execute();
-            OnLogReceived("Screenshot", result.Success ? $"Kaydedildi: {path}" : $"Hata: {result.Error}");
+            var result = new Commands.TakeScreenshotCommand(path).Execute();
+            Debug.Log($"[BitBing] Screenshot: {(result.Success ? path : result.Error)}");
         }
 
         private void OnRefreshAssets()
         {
             AssetDatabase.Refresh();
-            OnLogReceived("Assets", "Asset database yenilendi");
+            Debug.Log("[BitBing] Asset database yenilendi");
         }
 
         private void OnClearConsole()
         {
             var assembly = System.Reflection.Assembly.GetAssembly(typeof(SceneView));
-            var type = assembly.GetType("UnityEditor.LogEntries");
-            var method = type.GetMethod("Clear");
-            method?.Invoke(null, null);
-            OnLogReceived("Console", "Console temizlendi");
+            var type = assembly?.GetType("UnityEditor.LogEntries");
+            type?.GetMethod("Clear")?.Invoke(null, null);
         }
 
-        private void OnClearLogs()
+        private void OnClearChat()
         {
-            _logContainer?.Clear();
-            OnLogReceived("Panel", "Loglar temizlendi");
+            _chatContainer?.Clear();
+        }
+
+        // ── FALLBACK UI (no UXML) ─────────────────────────────────────────
+        private void BuildFallbackUI()
+        {
+            _root = new VisualElement();
+            _root.style.flexGrow = 1;
+            _root.style.flexDirection = FlexDirection.Column;
+            _root.style.backgroundColor = new Color(0.1f, 0.1f, 0.1f);
+            _root.style.paddingLeft = 6;
+            _root.style.paddingRight = 6;
+            _root.style.paddingTop = 6;
+            _root.style.paddingBottom = 6;
+            rootVisualElement.Add(_root);
+
+            // Server row
+            var serverRow = new VisualElement();
+            serverRow.style.flexDirection = FlexDirection.Row;
+            serverRow.style.alignItems = Align.Center;
+            serverRow.style.marginBottom = 4;
+
+            _serverDot = new VisualElement();
+            _serverDot.style.width = 7; _serverDot.style.height = 7;
+            _serverDot.style.borderTopLeftRadius = 4; _serverDot.style.borderTopRightRadius = 4;
+            _serverDot.style.borderBottomLeftRadius = 4; _serverDot.style.borderBottomRightRadius = 4;
+            _serverDot.style.backgroundColor = new Color(0.4f, 0.4f, 0.4f);
+            _serverDot.style.marginRight = 6;
+            serverRow.Add(_serverDot);
+
+            _serverLabel = new Label("Python sunucu kontrol ediliyor…");
+            _serverLabel.style.flexGrow = 1;
+            _serverLabel.style.fontSize = 10;
+            _serverLabel.style.color = new Color(0.5f, 0.5f, 0.5f);
+            serverRow.Add(_serverLabel);
+
+            _serverButton = new Button(OnServerButtonClicked) { text = "Başlat" };
+            _serverButton.style.fontSize = 10;
+            serverRow.Add(_serverButton);
+            _root.Add(serverRow);
+
+            // Connection row
+            var connRow = new VisualElement();
+            connRow.style.flexDirection = FlexDirection.Row;
+            connRow.style.alignItems = Align.Center;
+            connRow.style.marginBottom = 6;
+
+            _connectionDot = new VisualElement();
+            _connectionDot.style.width = 8;
+            _connectionDot.style.height = 8;
+            _connectionDot.style.borderTopLeftRadius = 4;
+            _connectionDot.style.borderTopRightRadius = 4;
+            _connectionDot.style.borderBottomLeftRadius = 4;
+            _connectionDot.style.borderBottomRightRadius = 4;
+            _connectionDot.style.backgroundColor = new Color(0.4f, 0.4f, 0.4f);
+            _connectionDot.style.marginRight = 6;
+            connRow.Add(_connectionDot);
+
+            _connectionLabel = new Label("Bağlı değil");
+            _connectionLabel.style.flexGrow = 1;
+            _connectionLabel.style.fontSize = 11;
+            _connectionLabel.style.color = Color.white;
+            connRow.Add(_connectionLabel);
+
+            _connectButton = new Button(OnConnectClicked) { text = "Bağlan" };
+            _connectButton.style.fontSize = 10;
+            connRow.Add(_connectButton);
+            _root.Add(connRow);
+
+            // Agent cards container
+            _agentCardsContainer = new VisualElement();
+            _agentCardsContainer.style.flexDirection = FlexDirection.Row;
+            _agentCardsContainer.style.flexWrap = Wrap.Wrap;
+            _agentCardsContainer.style.marginBottom = 6;
+            _root.Add(_agentCardsContainer);
+            PopulateAgentCards();
+
+            // Chat title
+            var chatTitle = new Label("CHAT");
+            chatTitle.style.fontSize = 10;
+            chatTitle.style.color = new Color(0.5f, 0.5f, 0.5f);
+            chatTitle.style.unityFontStyleAndWeight = FontStyle.Bold;
+            chatTitle.style.marginBottom = 3;
+            _root.Add(chatTitle);
+
+            // Chat scroll
+            _chatScrollView = new ScrollView();
+            _chatScrollView.style.flexGrow = 1;
+            _chatScrollView.style.backgroundColor = new Color(0.14f, 0.14f, 0.14f);
+            _chatScrollView.style.borderTopLeftRadius = 4;
+            _chatScrollView.style.borderTopRightRadius = 4;
+            _chatScrollView.style.borderBottomLeftRadius = 4;
+            _chatScrollView.style.borderBottomRightRadius = 4;
+            _chatScrollView.style.marginBottom = 5;
+
+            _chatContainer = new VisualElement();
+            _chatContainer.style.flexDirection = FlexDirection.Column;
+            _chatContainer.style.paddingLeft = 5;
+            _chatContainer.style.paddingRight = 5;
+            _chatContainer.style.paddingTop = 5;
+            _chatContainer.style.paddingBottom = 5;
+            _chatScrollView.Add(_chatContainer);
+            _root.Add(_chatScrollView);
+
+            // Input row
+            var inputRow = new VisualElement();
+            inputRow.style.flexDirection = FlexDirection.Row;
+            inputRow.style.marginBottom = 5;
+
+            _chatInput = new TextField();
+            _chatInput.style.flexGrow = 1;
+            _chatInput.style.fontSize = 11;
+            _chatInput.style.marginRight = 5;
+            _chatInput.RegisterCallback<KeyDownEvent>(e =>
+            {
+                if (e.keyCode == KeyCode.Return) { OnSend(); e.StopPropagation(); }
+            });
+            inputRow.Add(_chatInput);
+
+            _sendButton = new Button(OnSend) { text = "Gönder" };
+            _sendButton.style.fontSize = 11;
+            inputRow.Add(_sendButton);
+            _root.Add(inputRow);
+
+            // Quick commands
+            var cmdRow = new VisualElement();
+            cmdRow.style.flexDirection = FlexDirection.Row;
+            cmdRow.style.flexWrap = Wrap.Wrap;
+            AddCmdButton(cmdRow, "▶", OnEnterPlayMode);
+            AddCmdButton(cmdRow, "⏹", OnExitPlayMode);
+            AddCmdButton(cmdRow, "📸", OnTakeScreenshot);
+            AddCmdButton(cmdRow, "🔄", OnRefreshAssets);
+            AddCmdButton(cmdRow, "🧹", OnClearChat);
+            AddCmdButton(cmdRow, "C", OnClearConsole);
+            _root.Add(cmdRow);
+        }
+
+        private static void AddCmdButton(VisualElement parent, string text, Action callback)
+        {
+            var btn = new Button(callback) { text = text };
+            btn.style.fontSize = 10;
+            btn.style.paddingLeft = 6;
+            btn.style.paddingRight = 6;
+            btn.style.marginRight = 3;
+            btn.style.marginBottom = 2;
+            parent.Add(btn);
         }
     }
 }
