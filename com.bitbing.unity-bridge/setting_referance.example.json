@@ -1,0 +1,9 @@
+{
+  "_comment": "Copy this file to setting_referance.json (git-ignored) and fill in your real OpenRouter key. The Python LLM client reads it at startup.",
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://openrouter.ai/api",
+    "ANTHROPIC_AUTH_TOKEN": "sk-or-v1-REPLACE_ME",
+    "ANTHROPIC_API_KEY": "",
+    "ANTHROPIC_MODEL": "google/gemini-3.1-flash-lite-preview"
+  }
+}

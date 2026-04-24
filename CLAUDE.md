@@ -2,6 +2,24 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Status: production-ready (LLM-driven)
+
+The chat panel is fully functional with **real LLM responses** end-to-end:
+
+- Gating: Vates (LLM) classifies every prompt → chat_only or pipeline_start.
+  Greetings, "evet", "ne yapabilirsin" stay as chat. Concrete production verbs
+  (oluştur/yap/ekle/build/…) trigger the 6-agent pipeline.
+- Pipeline: when triggered, runs vates(plan) → diafor → ahbab → obsidere →
+  patientia → magnumpus. Magnumpus also uses the LLM to write a 2-3 sentence
+  Türkçe summary that lands in the chat (no markdown tables anymore).
+- Sliding 12-turn chat history is fed back into the gate so follow-up "evet"
+  is read in context, not as a fresh build request.
+
+Default model: `google/gemini-3.1-flash-lite-preview` (configured via
+`com.bitbing.unity-bridge/setting_referance.json`, git-ignored — see
+`setting_referance.example.json` for the schema). Any other OpenRouter
+chat-completions model can be dropped in; a server restart picks it up.
+
 ## Repository layout
 
 This is a **monorepo** containing three related pieces. The top-level folder is **not** a Unity project:
