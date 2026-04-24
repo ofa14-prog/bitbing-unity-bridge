@@ -3,7 +3,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Net.Sockets;
 using System.Net.Http;
 using System.Text;
 using System.Threading;
@@ -12,6 +11,8 @@ using UnityEngine;
 using UnityEngine.UIElements;
 using UnityEditor;
 using BitBing.UnityBridge.Editor.Settings;
+using BitBing.UnityBridge.Editor.Helpers;
+using BitBing.UnityBridge.Editor.Services;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Debug = UnityEngine.Debug;
@@ -25,7 +26,8 @@ namespace BitBing.UnityBridge.Editor.UI
     /// </summary>
     public class AgentPanelWindow : EditorWindow
     {
-        // ── bridge
+        // ── bridge (owned by service locator)
+        private BridgeControlService _bridge;
         private McpListener _mcpListener;
         private BridgeSettings _settings;
 
@@ -54,9 +56,8 @@ namespace BitBing.UnityBridge.Editor.UI
         private readonly ConcurrentQueue<Action> _mainQueue = new();
         private CancellationTokenSource _pipelineCts;
 
-        // ── Python server process
-        private Process _serverProcess;
-        private const int ChatServerPort = 8001;
+        // ── Python server process (managed by PythonServerLauncher)
+        private int _chatPort = PortManager.DefaultChatPort;
 
         // ── colors
         private static readonly Color ColorVates     = new(1f,   59/255f, 59/255f);
@@ -66,7 +67,7 @@ namespace BitBing.UnityBridge.Editor.UI
         private static readonly Color ColorPatientia = new(170/255f,  0,  1f);
         private static readonly Color ColorMagnumpus = new(1f,  109/255f,  0);
 
-        private const string PythonChatUrl = "http://127.0.0.1:8001/api/run";
+        private string PythonChatUrl => $"http://127.0.0.1:{_chatPort}/api/run";
 
         [MenuItem("Window/BitBing/Agent Panel %#g")]
         public static void ShowWindow()
@@ -96,16 +97,11 @@ namespace BitBing.UnityBridge.Editor.UI
             _pipelineCts?.Cancel();
             _pipelineCts = null;
 
-            // Release the process handle (don't kill — let server keep running)
-            _serverProcess?.Dispose();
-            _serverProcess = null;
-
+            // Don't tear down the bridge — service-locator owns it (lives across windows)
             if (_mcpListener != null)
             {
                 _mcpListener.OnLog -= OnLogReceived;
                 _mcpListener.OnMessageProcessed -= OnMessageProcessed;
-                _mcpListener.Stop();
-                _mcpListener.Dispose();
                 _mcpListener = null;
             }
         }
@@ -386,91 +382,48 @@ namespace BitBing.UnityBridge.Editor.UI
 
         // ── PYTHON SERVER MANAGEMENT ─────────────────────────────────────
 
-        private void CheckAndStartServer()
+        private async void CheckAndStartServer()
         {
-            if (IsServerRunning())
-            {
-                SetServerUI("running", "Çalışıyor — localhost:" + ChatServerPort, "Durdur");
-                return;
-            }
-            StartPythonServer();
+            SetServerUI("starting", "Kontrol ediliyor…", "—");
+            var result = await PythonServerLauncher.EnsureRunningAsync();
+            _chatPort = result.Port > 0 ? result.Port : PortManager.DefaultChatPort;
+            Enqueue(() => SetServerUI(
+                result.Success ? "running" : "error",
+                result.Success ? $"Çalışıyor — localhost:{_chatPort}" : $"Başlatılamadı: {result.Message}",
+                result.Success ? "Durdur" : "Tekrar Dene"));
         }
 
-        private void OnServerButtonClicked()
+        private async void OnServerButtonClicked()
         {
             if (_serverButton == null) return;
             if (_serverButton.text == "Durdur")
-                StopPythonServer();
-            else
-                StartPythonServer();
-        }
-
-        private void StartPythonServer()
-        {
-            SetServerUI("starting", "Başlatılıyor…", "—");
-
-            var (exe, args, workDir) = FindServerCommand();
-
-            if (exe == null)
             {
-                var hint = FindPythonServerDir() is { } dir
-                    ? $"Kur: cd \"{dir}\" && pip install -e ."
-                    : "unity-mcp-chat bulunamadı — pip install -e . çalıştır";
-                SetServerUI("error", hint, "Tekrar Dene");
+                StopPythonServer();
                 return;
             }
-
-            try
-            {
-                var info = new ProcessStartInfo
-                {
-                    FileName = exe,
-                    Arguments = args,
-                    WorkingDirectory = workDir ?? "",
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                };
-
-                _serverProcess?.Dispose();
-                _serverProcess = new Process { StartInfo = info, EnableRaisingEvents = true };
-
-                _serverProcess.Exited += (_, __) =>
-                {
-                    Enqueue(() => SetServerUI("error", "Sunucu durdu", "Başlat"));
-                    _serverProcess?.Dispose();
-                    _serverProcess = null;
-                };
-
-                _serverProcess.Start();
-
-                // Check after 2.5 s whether it actually came up
-                Task.Delay(2500).ContinueWith(_ =>
-                {
-                    bool up = IsServerRunning();
-                    Enqueue(() => SetServerUI(
-                        up ? "running" : "error",
-                        up ? "Çalışıyor — localhost:" + ChatServerPort : "Başlatılamadı",
-                        up ? "Durdur" : "Tekrar Dene"));
-                });
-            }
-            catch (Exception ex)
-            {
-                SetServerUI("error", $"Hata: {ex.Message}", "Tekrar Dene");
-            }
+            SetServerUI("starting", "Başlatılıyor…", "—");
+            var result = await PythonServerLauncher.EnsureRunningAsync();
+            _chatPort = result.Port > 0 ? result.Port : PortManager.DefaultChatPort;
+            Enqueue(() => SetServerUI(
+                result.Success ? "running" : "error",
+                result.Success ? $"Çalışıyor — localhost:{_chatPort}" : $"Başlatılamadı: {result.Message}",
+                result.Success ? "Durdur" : "Tekrar Dene"));
         }
 
         private void StopPythonServer()
         {
-            try
+            var pid = PidFileManager.Read();
+            if (pid.HasValue && PidFileManager.IsAlive(pid.Value))
             {
-                if (_serverProcess != null && !_serverProcess.HasExited)
+                try
                 {
-                    _serverProcess.Kill();
-                    _serverProcess.Dispose();
-                    _serverProcess = null;
+                    var p = Process.GetProcessById(pid.Value);
+                    p.Kill();
+                    p.Dispose();
                 }
+                catch (Exception ex) { Debug.LogWarning($"[AgentPanel] Stop failed: {ex.Message}"); }
             }
-            catch { /* already gone */ }
+            PidFileManager.Clear();
             SetServerUI("", "Durduruldu", "Başlat");
         }
 
@@ -497,98 +450,49 @@ namespace BitBing.UnityBridge.Editor.UI
             if (_serverButton != null) _serverButton.text = buttonText;
         }
 
-        private bool IsServerRunning()
-        {
-            try
-            {
-                using var tcp = new TcpClient();
-                var ar = tcp.BeginConnect("127.0.0.1", ChatServerPort, null, null);
-                bool ok = ar.AsyncWaitHandle.WaitOne(400);
-                if (ok) tcp.EndConnect(ar);
-                return ok;
-            }
-            catch { return false; }
-        }
-
-        /// <summary>Returns (exe, args, workingDir) or (null,_,_) if not found.</summary>
-        private (string exe, string args, string workDir) FindServerCommand()
-        {
-            // 1) unity-mcp-chat installed by pip (preferred)
-            if (ExistsInPath("unity-mcp-chat"))
-                return ("unity-mcp-chat", "", null);
-
-            // 2) python -m uvicorn from detected server directory
-            var serverDir = FindPythonServerDir();
-            if (serverDir != null)
-            {
-                var python = ExistsInPath("python3") ? "python3"
-                           : ExistsInPath("python")  ? "python"
-                           : null;
-                if (python != null)
-                    return (python,
-                            "-m uvicorn unity_mcp_server.chat_server:app --host 127.0.0.1 --port 8001",
-                            Path.Combine(serverDir, "src"));
-            }
-
-            return (null, null, null);
-        }
-
-        private static string FindPythonServerDir()
-        {
-            // Walk up from Assets/ looking for the sibling unity-mcp-server directory
-            var dir = new DirectoryInfo(Application.dataPath);
-            for (int i = 0; i < 7; i++)
-            {
-                dir = dir.Parent;
-                if (dir == null) break;
-                var candidate = Path.Combine(dir.FullName, "unity-mcp-server");
-                if (Directory.Exists(candidate) &&
-                    File.Exists(Path.Combine(candidate, "pyproject.toml")))
-                    return candidate;
-            }
-            return null;
-        }
-
-        private static bool ExistsInPath(string command)
-        {
-            var pathEnv = Environment.GetEnvironmentVariable("PATH") ?? "";
-            var exts = new[] { "", ".exe", ".cmd", ".bat" };
-            foreach (var dir in pathEnv.Split(Path.PathSeparator))
-            {
-                foreach (var ext in exts)
-                {
-                    if (File.Exists(Path.Combine(dir, command + ext)))
-                        return true;
-                }
-            }
-            return false;
-        }
-
-        // ── MCP LISTENER ─────────────────────────────────────────────────
+        // ── MCP LISTENER (delegated to BridgeControlService via service locator) ─
         private void InitializeMcpListener()
         {
-            _mcpListener = new McpListener(_settings.mcpPort);
-            _mcpListener.OnLog += OnLogReceived;
-            _mcpListener.OnMessageProcessed += OnMessageProcessed;
+            _bridge = BitBingServiceLocator.Bridge;
 
-            if (_settings.autoConnect)
+            if (_settings.autoConnect && !_bridge.IsRunning)
             {
-                _mcpListener.Start();
-                UpdateConnectionUI(true);
+                _bridge.Start();
             }
+
+            _mcpListener = _bridge.Listener;
+            if (_mcpListener != null)
+            {
+                _mcpListener.OnLog += OnLogReceived;
+                _mcpListener.OnMessageProcessed += OnMessageProcessed;
+            }
+            UpdateConnectionUI(_bridge.IsRunning);
         }
 
         private void OnConnectClicked()
         {
-            if (_mcpListener.IsRunning)
+            if (_bridge.IsRunning)
             {
-                _mcpListener.Stop();
+                _bridge.Stop();
+                _mcpListener = null;
                 UpdateConnectionUI(false);
             }
             else
             {
-                _mcpListener.Start();
-                UpdateConnectionUI(true);
+                if (_bridge.Start())
+                {
+                    _mcpListener = _bridge.Listener;
+                    if (_mcpListener != null)
+                    {
+                        _mcpListener.OnLog += OnLogReceived;
+                        _mcpListener.OnMessageProcessed += OnMessageProcessed;
+                    }
+                    UpdateConnectionUI(true);
+                }
+                else
+                {
+                    UpdateConnectionUI(false);
+                }
             }
         }
 
@@ -602,8 +506,9 @@ namespace BitBing.UnityBridge.Editor.UI
                 else
                     _connectionDot.RemoveFromClassList("connected");
             }
+            int port = _bridge != null && _bridge.CurrentPort > 0 ? _bridge.CurrentPort : _settings.mcpPort;
             if (_connectionLabel != null)
-                _connectionLabel.text = connected ? $"Bağlı — localhost:{_settings.mcpPort}" : "Bağlı değil";
+                _connectionLabel.text = connected ? $"Bağlı — localhost:{port}" : "Bağlı değil";
             if (_connectButton != null)
                 _connectButton.text = connected ? "Kes" : "Bağlan";
         }

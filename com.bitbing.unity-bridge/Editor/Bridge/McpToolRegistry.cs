@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 using UnityEngine;
 
@@ -11,6 +13,11 @@ namespace BitBing.UnityBridge.Editor
     /// <summary>
     /// Registry for MCP tools that map to Unity commands.
     /// Each tool corresponds to a command from EKLENTİR.md §6.3.
+    ///
+    /// Auto-discovery (adapted from COPLAY's CommandRegistry):
+    /// - Reflects every type implementing IMcpTool with a public parameterless ctor.
+    /// - Registers via tool.Name. No manual RegisterDefaultTools() block needed —
+    ///   adding a new tool is now a single new file.
     /// </summary>
     public static class McpToolRegistry
     {
@@ -21,25 +28,40 @@ namespace BitBing.UnityBridge.Editor
         static void Initialize()
         {
             if (s_initialized) return;
-            RegisterDefaultTools();
+            AutoDiscoverTools();
             s_initialized = true;
         }
 
-        private static void RegisterDefaultTools()
+        private static void AutoDiscoverTools()
         {
-            RegisterTool(new CreateGameObjectTool());
-            RegisterTool(new DeleteGameObjectTool());
-            RegisterTool(new AddComponentTool());
-            RegisterTool(new WriteScriptTool());
-            RegisterTool(new CompileScriptsTool());
-            RegisterTool(new CreateSceneTool());
-            RegisterTool(new OpenSceneTool());
-            RegisterTool(new EnterPlayModeTool());
-            RegisterTool(new ExitPlayModeTool());
-            RegisterTool(new TakeScreenshotTool());
-            RegisterTool(new RunTestsTool());
+            try
+            {
+                var toolType = typeof(IMcpTool);
+                var discovered = AppDomain.CurrentDomain.GetAssemblies()
+                    .Where(a => !a.IsDynamic)
+                    .SelectMany(a => { try { return a.GetTypes(); } catch { return Array.Empty<Type>(); } })
+                    .Where(t => !t.IsAbstract && !t.IsInterface && toolType.IsAssignableFrom(t))
+                    .Where(t => t.GetConstructor(Type.EmptyTypes) != null);
 
-            Debug.Log($"[McpToolRegistry] Registered {s_tools.Count} tools");
+                foreach (var t in discovered)
+                {
+                    try
+                    {
+                        var instance = (IMcpTool)Activator.CreateInstance(t);
+                        RegisterTool(instance);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogWarning($"[McpToolRegistry] Failed to instantiate {t.Name}: {ex.Message}");
+                    }
+                }
+
+                Debug.Log($"[McpToolRegistry] Auto-discovered {s_tools.Count} tools");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[McpToolRegistry] Auto-discovery failed: {ex.Message}");
+            }
         }
 
         public static void RegisterTool(IMcpTool tool)

@@ -5,6 +5,8 @@ GREEN #00E676 - KONU.md §4.2
 import logging
 from typing import Any, Dict, List, Optional
 
+from .unity_transport import get_transport
+
 logger = logging.getLogger(__name__)
 
 
@@ -14,7 +16,7 @@ class AhbabAgent:
     def __init__(self):
         self._color = "#00E676"
         self._name = "ahbab"
-        self._unity_port = 8080
+        self._transport = get_transport()
         self._command_history: List[Dict] = []
 
     async def initialize(self):
@@ -74,28 +76,8 @@ class AhbabAgent:
         return result
 
     async def _call_unity_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        """Call a tool on the Unity side."""
-        try:
-            import httpx
-
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(
-                    f"http://localhost:{self._unity_port}/mcp",
-                    json={
-                        "jsonrpc": "2.0",
-                        "id": "1",
-                        "method": "tools/call",
-                        "params": {
-                            "name": tool_name,
-                            "arguments": arguments
-                        }
-                    }
-                )
-                response.raise_for_status()
-                return response.json()
-        except Exception as e:
-            logger.error(f"Unity tool call failed: {e}")
-            return {"success": False, "error": str(e)}
+        """Call a tool on the Unity side via the shared UnityTransport."""
+        return await self._transport.call_tool(tool_name, arguments)
 
     async def _setup_project(self, task: Dict) -> Dict[str, Any]:
         """Set up Unity project structure."""

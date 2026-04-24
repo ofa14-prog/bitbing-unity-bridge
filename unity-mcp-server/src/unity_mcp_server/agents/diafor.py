@@ -5,9 +5,16 @@ YELLOW #FFD600 - KONU.md §4.2
 import logging
 from typing import Any, Dict
 
+from .. import port_registry
+
 logger = logging.getLogger(__name__)
 
-_UNITY_URL = "http://127.0.0.1:8080/mcp"
+
+def _unity_url() -> str:
+    """Read Unity port from shared registry (Unity bridge writes it on start)."""
+    return f"http://127.0.0.1:{port_registry.get_unity_port()}/mcp"
+
+
 _UNREAL_URL = "http://127.0.0.1:57433/mcp"
 
 # MCP initialize probe — McpListener expects POST JSON-RPC
@@ -39,7 +46,7 @@ class DiaforAgent:
         checks: Dict[str, bool] = {}
 
         if motor == "unity":
-            checks["unity_bridge"] = await self._ping(_UNITY_URL)
+            checks["unity_bridge"] = await self._ping(_unity_url())
         elif motor == "unreal":
             checks["unreal_bridge"] = await self._ping(_UNREAL_URL)
         elif motor == "dahili":

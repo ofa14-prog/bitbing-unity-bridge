@@ -8,9 +8,10 @@ from typing import Any, Dict
 
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from pydantic import BaseModel
 
+from . import pid_manager, port_registry
 from .agents.orchestrator import AgentOrchestrator
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,16 @@ class RunRequest(BaseModel):
 @app.get("/")
 async def index():
     return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/health")
+async def health():
+    """Liveness probe used by the Unity Agent Panel before sending prompts."""
+    return JSONResponse({
+        "status": "ok",
+        "unity_port": port_registry.get_unity_port(),
+        "chat_port": port_registry.get_chat_port(),
+    })
 
 
 @app.post("/api/run")
@@ -93,14 +104,30 @@ async def ws_endpoint(websocket: WebSocket):
 
 
 def start() -> None:
-    """Entry point for the unity-mcp-chat CLI command."""
+    """Entry point for the unity-mcp-chat CLI command.
+
+    - Claims a PID file to prevent duplicate launches.
+    - Picks a free port (default 8001, falls back if busy) and writes it to
+      the shared registry so the Unity Agent Panel can discover it.
+    """
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
     )
-    uvicorn.run(
-        "unity_mcp_server.chat_server:app",
-        host="127.0.0.1",
-        port=8001,
-        reload=False,
-    )
+    pid_manager.claim_or_exit()
+
+    port = port_registry.DEFAULT_CHAT_PORT
+    if not port_registry.is_port_available(port):
+        port = port_registry.find_available_chat_port(port + 1)
+        logger.warning("Default chat port busy, using %d instead", port)
+    port_registry.save_chat_port(port)
+
+    try:
+        uvicorn.run(
+            "unity_mcp_server.chat_server:app",
+            host="127.0.0.1",
+            port=port,
+            reload=False,
+        )
+    finally:
+        pid_manager.clear()
