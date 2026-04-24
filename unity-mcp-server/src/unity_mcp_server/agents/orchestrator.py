@@ -231,25 +231,29 @@ class AgentOrchestrator:
         grade = patientia_result.get("grade", "F")
         await emit("patientia", "done", f"Puan: {score}/100 — Not: {grade}")
 
-        # Phase 6: magnumpus
-        await emit("magnumpus", "running", "Çıktılar paketleniyor…")
-        magnumpus_result = await self._magnumpus.package(task_dag, ahbab_results, patientia_result)
-        await emit("magnumpus", "done", magnumpus_result.get("delivery_message", "Teslim tamamlandı"))
+        # Phase 6: magnumpus — LLM writes a natural-language Türkçe reply
+        await emit("magnumpus", "running", "Sonuçlar Türkçe özete çevriliyor…")
+        magnumpus_result = await self._magnumpus.package(
+            task_dag,
+            ahbab_results,
+            patientia_result,
+            user_input=user_input,
+            obsidere_result=obsidere_result,
+        )
+        delivery_text = magnumpus_result.get("delivery_message", "Teslim tamamlandı")
+        await emit("magnumpus", "done", "Cevap hazır")
 
         summary = self._format_pipeline_summary(
             vates_result, diafor_result, ahbab_results, obsidere_result, patientia_result, magnumpus_result
         )
         await progress({
             "type": "pipeline_complete",
+            "text": delivery_text,
             "summary": summary,
             "score": score,
             "grade": grade,
         })
-        self._push_history(
-            "assistant",
-            f"Pipeline tamamlandı. Puan: {score}/100 ({grade}). "
-            f"{magnumpus_result.get('delivery_message', '')}".strip(),
-        )
+        self._push_history("assistant", delivery_text)
 
     def _push_history(self, role: str, content: str) -> None:
         if not content:

@@ -304,11 +304,17 @@ namespace BitBing.UnityBridge.Editor.UI
                     break;
 
                 case "pipeline_complete":
-                    var score = (int)(obj["score"] ?? 0);
-                    var grade = obj["grade"]?.ToString() ?? "?";
-                    var emoji = score >= 80 ? "🎉" : score >= 60 ? "✅" : score >= 40 ? "⚠️" : "🛟";
-                    var msg = $"{emoji} Pipeline tamamlandı — **{score}/100** (Not: {grade}). Detayları Unity Console'da görebilirsin.";
-                    Enqueue(() => AddBubble(msg, isUser: false));
+                    // Magnumpus artık LLM ile doğal Türkçe özet yazıyor — onu kullan.
+                    var llmText = obj["text"]?.ToString();
+                    if (string.IsNullOrWhiteSpace(llmText))
+                    {
+                        var score = (int)(obj["score"] ?? 0);
+                        var grade = obj["grade"]?.ToString() ?? "?";
+                        var emoji = score >= 80 ? "🎉" : score >= 60 ? "✅" : score >= 40 ? "⚠️" : "🛟";
+                        llmText = $"{emoji} Pipeline tamamlandı — {score}/100 (Not: {grade}).";
+                    }
+                    var finalText = llmText;
+                    Enqueue(() => AddBubble(finalText, isUser: false));
                     break;
 
                 case "pipeline_failed":
