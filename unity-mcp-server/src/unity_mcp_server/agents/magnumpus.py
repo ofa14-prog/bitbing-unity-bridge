@@ -13,17 +13,23 @@ from ..llm_client import get_llm
 logger = logging.getLogger(__name__)
 
 
-_SUMMARY_SYSTEM = """Sen "Magnumpus" adlı teslimat ajansın. Az önce 6-ajanlı bir Unity oyun
-üretim hattı çalıştı. Sana JSON olarak: kullanıcının orijinal isteği,
-çalıştırılan görevler, ahbab'ın komut sonuçları, hata sayısı ve patientia'nın
-puanı verilecek.
+_SUMMARY_SYSTEM = """Sen "Magnumpus"sun. Az önce 6-ajanlı bir Unity hattı çalıştı, sonuçları sana
+JSON olarak verilecek. Kullanıcıya doğal bir Türkçe cevap yazacaksın.
 
-Görevin: kullanıcıya 2-4 cümlelik, samimi, Türkçe bir özet yaz.
-- Markdown tablo, başlık, bullet KULLANMA. Düz akıcı metin yaz.
-- Ne yapıldığını insancıl bir dille özetle.
-- Puanı doğal bir cümlenin içinde geçir.
-- Hata varsa bunu yumuşak bir dille söyle ve bir sonraki adım için kısa öneri ver.
-- Maksimum 4 cümle. Emoji 1 tane yeterli, başta olabilir."""
+KESİN KURALLAR (ihlal edersen cevabın atılır):
+- En fazla 3 cümle.
+- DÜZ METİN. Markdown YOK: tablo, başlık, **kalın**, _italik_, bullet, kod bloğu, | karakteri YASAK.
+- Hashtag, ### başlık, "Projenin Özeti" gibi etiketler YASAK.
+- En fazla 1 emoji, cümlenin başında olsun.
+- Puanı tek bir cümlenin içine doğal bir şekilde sok ("90/100 puan aldı" gibi).
+- Hata varsa kısa bir öneriyle bitir.
+
+Örnek doğru çıktı:
+"✅ Sahneye küpü ekledim ve hızlı bir kontrol yaptım, 90/100 ile temiz çıktı. Sonraki adımda istersen küpe basit bir animasyon da ekleyebilirim."
+
+Örnek YANLIŞ çıktı (tablo, başlık, çok bullet):
+"## Projenin Özeti  \\n| Kullanıcı | Görev | ... |"
+"""
 
 
 class MagnumpusAgent:
@@ -142,13 +148,47 @@ class MagnumpusAgent:
                     system=_SUMMARY_SYSTEM,
                     temperature=0.6,
                 )
-                text = (text or "").strip()
+                text = self._sanitize(text or "")
                 if text:
                     return text
             except Exception as exc:
                 logger.warning("[magnumpus] LLM summary failed (%s) — using fallback", exc)
 
         return self._fallback_summary(user_input, executed, score, grade, error_count)
+
+    @staticmethod
+    def _sanitize(text: str) -> str:
+        """Strip markdown noise the model may have ignored the rules on."""
+        import re
+        # If the model dumped a markdown table, drop everything from the table line on
+        # and keep only the prose before/after it.
+        lines = text.splitlines()
+        cleaned: List[str] = []
+        for ln in lines:
+            stripped = ln.strip()
+            if not stripped:
+                continue
+            if stripped.startswith("|") or set(stripped) <= set("|-: "):  # table row or separator
+                continue
+            if stripped.startswith("#"):                                   # heading
+                stripped = stripped.lstrip("#").strip()
+            if not stripped:
+                continue
+            cleaned.append(stripped)
+        text = " ".join(cleaned)
+        # Bold/italic/code → plain
+        text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
+        text = re.sub(r"__(.+?)__", r"\1", text)
+        text = re.sub(r"`([^`]+)`", r"\1", text)
+        # Escaped newlines
+        text = text.replace("\\n", " ")
+        # Compress whitespace
+        text = re.sub(r"\s+", " ", text).strip()
+        # Hard cap ≈ 4 sentences
+        sentences = re.split(r"(?<=[.!?])\s+", text)
+        if len(sentences) > 4:
+            text = " ".join(sentences[:4])
+        return text
 
     @staticmethod
     def _fallback_summary(user_input: str, executed: List[str], score: int, grade: str, errors: int) -> str:
