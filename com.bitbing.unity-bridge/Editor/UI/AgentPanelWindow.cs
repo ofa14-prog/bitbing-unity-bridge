@@ -290,6 +290,11 @@ namespace BitBing.UnityBridge.Editor.UI
                     var reason = obj["reason"]?.ToString() ?? "Bilinmeyen hata";
                     Enqueue(() => AddBubble($"❌ Pipeline başarısız: {reason}", isUser: false));
                     break;
+
+                case "chat_message":
+                    var text = obj["text"]?.ToString() ?? "";
+                    Enqueue(() => AddBubble(text, isUser: false));
+                    break;
             }
         }
 

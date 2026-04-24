@@ -30,6 +30,10 @@ class AgentOrchestrator:
         self._iteration_count = 0
         self._max_iterations = 5
 
+        # Conversation history for the gatekeeper LLM (last N user/assistant turns).
+        self._chat_history: list[dict] = []
+        self._history_limit = 12
+
     async def initialize(self):
         """Initialize all agents."""
         logger.info("Initializing 6-agent orchestrator...")
@@ -156,15 +160,35 @@ class AgentOrchestrator:
         game_type: str,
         progress: Callable[[Dict[str, Any]], Coroutine],
     ) -> None:
-        """Run the full pipeline, emitting progress events to the chat UI."""
+        """Run the gated 6-agent pipeline, emitting progress events to the chat UI.
+
+        Vates first decides whether the prompt should trigger the pipeline at all.
+        - chat_only → emit a single chat_message event with the LLM's reply, done.
+        - pipeline_start → run the full 6-agent flow.
+        """
         self._iteration_count = 0
 
         async def emit(agent_id: str, status: str, message: str) -> None:
             await progress({"type": "agent_event", "agentId": agent_id, "status": status, "message": message})
 
-        # Phase 1: vates
-        await emit("vates", "running", "Kullanıcı girdisi analiz ediliyor…")
-        vates_result = await self._vates.analyze(user_input, game_type)
+        # ── Phase 0: gatekeeper ──────────────────────────────────────────
+        await emit("vates", "running", "Niyet analiz ediliyor…")
+        gate = await self._vates.classify_intent(user_input, history=self._chat_history)
+        self._push_history("user", user_input)
+
+        if not gate.get("trigger_pipeline"):
+            reply = gate.get("chat_reply") or "Anladım."
+            await emit("vates", "done", gate.get("reason") or "Sadece sohbet")
+            for other in ("diafor", "ahbab", "obsidere", "patientia", "magnumpus"):
+                await emit(other, "idle", "—")
+            await progress({"type": "chat_message", "text": reply, "reason": gate.get("reason", "")})
+            self._push_history("assistant", reply)
+            return
+
+        await emit("vates", "running", f"Plan hazırlanıyor — {gate.get('reason', '')}")
+
+        # ── Phase 1: vates (planning) ────────────────────────────────────
+        vates_result = await self._vates.plan(user_input, game_type)
         task_dag = vates_result.get("task_dag", [])
         await emit("vates", "done", f"{len(task_dag)} görev oluşturuldu")
 
@@ -212,14 +236,27 @@ class AgentOrchestrator:
         magnumpus_result = await self._magnumpus.package(task_dag, ahbab_results, patientia_result)
         await emit("magnumpus", "done", magnumpus_result.get("delivery_message", "Teslim tamamlandı"))
 
+        summary = self._format_pipeline_summary(
+            vates_result, diafor_result, ahbab_results, obsidere_result, patientia_result, magnumpus_result
+        )
         await progress({
             "type": "pipeline_complete",
-            "summary": self._format_pipeline_summary(
-                vates_result, diafor_result, ahbab_results, obsidere_result, patientia_result, magnumpus_result
-            ),
+            "summary": summary,
             "score": score,
             "grade": grade,
         })
+        self._push_history(
+            "assistant",
+            f"Pipeline tamamlandı. Puan: {score}/100 ({grade}). "
+            f"{magnumpus_result.get('delivery_message', '')}".strip(),
+        )
+
+    def _push_history(self, role: str, content: str) -> None:
+        if not content:
+            return
+        self._chat_history.append({"role": role, "content": content})
+        if len(self._chat_history) > self._history_limit:
+            self._chat_history = self._chat_history[-self._history_limit:]
 
     def _format_task_dag(self, result: Dict[str, Any]) -> str:
         """Format task DAG for display."""

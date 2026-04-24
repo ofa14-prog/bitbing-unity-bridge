@@ -136,6 +136,67 @@ Namespaces: `BitBing.UnityBridge.{Editor,Runtime,Editor.Commands,Editor.UI,Edito
 6. `pipeline_complete` → chat bubble with score/grade/summary
 7. `pipeline_failed` → error bubble
 
+## LLM gating (Vates is the gatekeeper)
+
+Every prompt the user types in the Agent Panel is **classified by Vates first** —
+the 6-agent pipeline does NOT start automatically.
+
+```
+prompt → orchestrator.run_with_progress()
+           │
+           ▼
+       vates.classify_intent(prompt, history)   ← LLM call (OpenRouter)
+           │
+   ┌───────┴───────┐
+   chat_only       pipeline_start
+   │               │
+   emit            run vates.plan() → diafor → ahbab → obsidere → patientia → magnumpus
+   chat_message    emit agent_event per step
+   event           emit pipeline_complete with score+grade
+   (only)
+```
+
+**Key rules baked into the gate prompt (vates.py `_GATE_SYSTEM`):**
+
+- Bare confirmations ("evet", "hayır", "tamam", "iptal", "ok") never trigger the pipeline.
+- Greetings, questions, clarifications, opinions → `chat_only`.
+- Concrete production verbs ("yap", "oluştur", "build", "create", "ekle", "kodla", …) → `pipeline_start`.
+- Vates returns JSON: `{decision, reason, chat_reply}`.
+
+The orchestrator keeps a sliding 12-turn `_chat_history` (user+assistant) so the
+gate sees context — that's what lets it correctly classify a follow-up "evet" as
+chat, not as a new build request.
+
+**LLM client (`unity_mcp_server/llm_client.py`):**
+
+OpenAI-compatible chat completions via `httpx` (no SDK dependency).
+
+Settings resolution order:
+1. Env vars: `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`
+2. `~/.bitbing/settings.json`
+3. `com.bitbing.unity-bridge/setting_referance.json` (dev convenience — git-ignored!)
+
+`setting_referance.json` schema:
+```json
+{ "env": { "ANTHROPIC_BASE_URL": "https://openrouter.ai/api",
+           "ANTHROPIC_AUTH_TOKEN": "sk-or-v1-…",
+           "ANTHROPIC_MODEL": "minimax/minimax-m2.7" } }
+```
+
+⚠️ **NEVER commit `setting_referance.json`.** It is in `.gitignore`. Rotate the
+key immediately if it leaks. The OpenRouter base URL is normalized to `/v1` if
+not already suffixed.
+
+**New event type: `chat_message`**
+
+When Vates says `chat_only`, the orchestrator emits `{type:"chat_message", text:…}`
+instead of `pipeline_complete`. The Agent Panel's `HandleStreamLine` switch has
+a case for it that just adds a system bubble — no agent cards advance.
+
+When Vates says `pipeline_start`, agent cards run as before; the cards for
+the chat-only branch are emitted as `idle` so the UI doesn't show stale "running"
+state from a prior run.
+
 ## COPLAY-inspired infrastructure (port registry, PID file, service locator)
 
 Adapted from `CoplayDev/unity-mcp` so the chat server and Unity bridge survive port collisions and double-launches. Both sides share a JSON registry:
