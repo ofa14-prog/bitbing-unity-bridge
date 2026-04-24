@@ -182,8 +182,6 @@ namespace BitBing.UnityBridge.Editor.UI
         private void AddAgentCard(string agentId, Color color, string description)
         {
             var card = new AgentStatusCard(agentId, color, description);
-            // 2-column grid: each card ~50% width
-            card.style.width = new StyleLength(Length.Percent(49));
             _agentCards[agentId] = card;
             _agentCardsContainer?.Add(card);
         }
@@ -203,6 +201,31 @@ namespace BitBing.UnityBridge.Editor.UI
             if (refresh != null)      refresh.clicked      += OnRefreshAssets;
             if (clearLogs != null)    clearLogs.clicked    += OnClearChat;
             if (clearConsole != null) clearConsole.clicked += OnClearConsole;
+
+            // Welcome chips → fill the chat input with a prompt suggestion
+            BindChip("chip1", "2D platformer için temel sahne ve oyuncu oluştur");
+            BindChip("chip2", "Sahneye düz bir zemin ve hareket eden bir oyuncu ekle");
+            BindChip("chip3", "Sahnenin ekran görüntüsünü çek");
+        }
+
+        private void BindChip(string name, string promptText)
+        {
+            var chip = _root?.Q<Button>(name);
+            if (chip == null) return;
+            chip.clicked += () =>
+            {
+                if (_chatInput != null)
+                {
+                    _chatInput.value = promptText;
+                    _chatInput.Focus();
+                }
+            };
+        }
+
+        private void HideWelcome()
+        {
+            var welcome = _root?.Q<VisualElement>("welcomeBubble");
+            if (welcome != null) welcome.style.display = DisplayStyle.None;
         }
 
         // ── CHAT: SEND ────────────────────────────────────────────────────
@@ -213,6 +236,7 @@ namespace BitBing.UnityBridge.Editor.UI
             if (string.IsNullOrEmpty(prompt)) return;
 
             _chatInput.value = string.Empty;
+            HideWelcome();
             AddBubble(prompt, isUser: true);
             ResetAgentCards();
             SetSendEnabled(false);
@@ -237,7 +261,7 @@ namespace BitBing.UnityBridge.Editor.UI
                 }
                 catch (Exception ex)
                 {
-                    Enqueue(() => AddBubble($"❌ Python sunucusuna bağlanılamadı: {ex.Message}\n\nÖnce 'unity-mcp-chat' komutunu çalıştır.", isUser: false));
+                    Enqueue(() => AddBubble($"😕 Python sunucusuna ulaşamadım. Üst köşedeki yeşil noktanın yandığından emin ol — yanmıyorsa 'Tekrar Dene' butonunu kullan.\n\n_Detay: {ex.Message}_", isUser: false));
                     Enqueue(() => SetSendEnabled(true));
                     return;
                 }
@@ -280,10 +304,11 @@ namespace BitBing.UnityBridge.Editor.UI
                     break;
 
                 case "pipeline_complete":
-                    var score   = (int)(obj["score"] ?? 0);
-                    var grade   = obj["grade"]?.ToString() ?? "?";
-                    var summary = obj["summary"]?.ToString() ?? "";
-                    Enqueue(() => AddBubble($"✅ Puan: {score}/100 ({grade})\n\n{summary}", isUser: false));
+                    var score = (int)(obj["score"] ?? 0);
+                    var grade = obj["grade"]?.ToString() ?? "?";
+                    var emoji = score >= 80 ? "🎉" : score >= 60 ? "✅" : score >= 40 ? "⚠️" : "🛟";
+                    var msg = $"{emoji} Pipeline tamamlandı — **{score}/100** (Not: {grade}). Detayları Unity Console'da görebilirsin.";
+                    Enqueue(() => AddBubble(msg, isUser: false));
                     break;
 
                 case "pipeline_failed":

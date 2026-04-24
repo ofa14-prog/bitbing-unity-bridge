@@ -1,200 +1,302 @@
 :root {
-  --color-vates:     rgb(255, 59,  59);
-  --color-diafor:    rgb(255, 214,  0);
-  --color-ahbab:     rgb(  0, 230, 118);
-  --color-obsidere:  rgb( 41, 121, 255);
-  --color-patientia: rgb(170,   0, 255);
-  --color-magnumpus: rgb(255, 109,   0);
+  --color-vates:     rgb(255,  92,  92);
+  --color-diafor:    rgb(255, 207,  64);
+  --color-ahbab:     rgb( 64, 224, 158);
+  --color-obsidere:  rgb( 96, 156, 255);
+  --color-patientia: rgb(196, 124, 255);
+  --color-magnumpus: rgb(255, 144,  64);
 
-  --bg:          rgb(26,  26,  26);
-  --surface:     rgb(36,  36,  36);
-  --surface2:    rgb(46,  46,  46);
-  --border:      rgba(255,255,255,0.08);
-  --text:        rgb(220, 220, 220);
-  --text-dim:    rgb(130, 130, 130);
-  --accent:      rgb( 88, 166, 255);
-  --green:       rgb( 63, 185,  80);
-  --red:         rgb(248,  81,  73);
+  --bg:          rgb(22,  23,  28);
+  --surface:     rgb(32,  34,  41);
+  --surface2:    rgb(42,  45,  54);
+  --surface3:    rgb(54,  58,  70);
+  --border:      rgba(255,255,255,0.06);
+  --border-strong: rgba(255,255,255,0.12);
+  --text:        rgb(232, 234, 240);
+  --text-dim:    rgb(150, 154, 168);
+  --text-muted:  rgb(108, 112, 124);
+  --accent:      rgb(116, 180, 255);
+  --accent-dim:  rgb( 60, 110, 180);
+  --green:       rgb( 82, 200, 130);
+  --amber:       rgb(240, 175,  60);
+  --red:         rgb(244, 100,  92);
 }
 
-/* ── ROOT ── */
+/* ── ROOT ───────────────────────────────────────────────────────── */
 .root {
   flex-grow: 1;
   flex-direction: column;
   background-color: var(--bg);
-  padding: 6px;
 }
 
-/* ── PYTHON SERVER BAR ── */
-.server-bar {
+/* ── HEADER ─────────────────────────────────────────────────────── */
+.header {
   flex-direction: row;
   align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
   background-color: var(--surface);
-  border-radius: 4px;
-  padding: 4px 8px;
-  margin-bottom: 4px;
-  border-width: 1px;
-  border-color: var(--border);
+  border-bottom-width: 1px;
+  border-bottom-color: var(--border);
 }
 
-.server-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 4px;
-  background-color: var(--text-dim);
-  margin-right: 6px;
-  flex-shrink: 0;
-}
-
-.server-dot.running  { background-color: var(--green); }
-.server-dot.starting { background-color: rgb(210, 153, 34); }
-.server-dot.error    { background-color: var(--red); }
-
-.server-text {
-  flex-grow: 1;
-  font-size: 10px;
-  color: var(--text-dim);
-}
-
-.server-btn {
-  font-size: 10px;
-  padding: 2px 8px;
-}
-
-/* ── CONNECTION BAR ── */
-.conn-bar {
+.header-left {
   flex-direction: row;
   align-items: center;
-  background-color: var(--surface);
-  border-radius: 4px;
-  padding: 5px 8px;
-  margin-bottom: 5px;
-  border-width: 1px;
-  border-color: var(--border);
 }
 
-.conn-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 4px;
-  background-color: var(--text-dim);
-  margin-right: 6px;
-  flex-shrink: 0;
+.header-emoji {
+  font-size: 22px;
+  margin-right: 8px;
 }
 
-.conn-dot.connected { background-color: var(--green); }
+.header-text {
+  flex-direction: column;
+}
 
-.conn-text {
-  flex-grow: 1;
-  font-size: 11px;
+.header-title {
+  font-size: 13px;
+  -unity-font-style: bold;
   color: var(--text);
 }
 
-.conn-btn {
-  font-size: 10px;
-  padding: 2px 8px;
+.header-subtitle {
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-top: 1px;
 }
 
-/* ── AGENT GRID ── */
-.agent-grid {
+.header-status {
+  flex-direction: row;
+  align-items: center;
+  background-color: var(--surface2);
+  border-radius: 12px;
+  padding: 3px 8px;
+  border-width: 1px;
+  border-color: var(--border);
+}
+
+.status-pill {
+  width: 7px;
+  height: 7px;
+  border-radius: 4px;
+  background-color: var(--text-muted);
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+.status-pill.running   { background-color: var(--green); }
+.status-pill.starting  { background-color: var(--amber); }
+.status-pill.error     { background-color: var(--red); }
+.status-pill.connected { background-color: var(--green); }
+
+.status-text {
+  font-size: 9px;
+  color: var(--text-dim);
+  margin-right: 6px;
+}
+
+.status-divider {
+  width: 1px;
+  height: 10px;
+  background-color: var(--border-strong);
+  margin-right: 6px;
+}
+
+/* ── HIDDEN CONTROLS (still wire-able) ─────────────────────────── */
+.hidden-controls {
+  display: none;
+}
+
+.ghost-btn {
+  display: none;
+}
+
+/* ── AGENT STRIP ───────────────────────────────────────────────── */
+.agent-strip {
   flex-direction: row;
   flex-wrap: wrap;
-  margin-bottom: 5px;
+  padding: 8px 10px 4px 10px;
+  background-color: var(--bg);
 }
 
-/* Each AgentStatusCard gets width 50% in C# */
 .agent-card-inner {
   flex-direction: row;
   align-items: center;
-  padding: 4px 5px;
-  border-radius: 3px;
+  padding: 5px 8px;
+  border-radius: 14px;
   border-width: 1px;
   border-color: var(--border);
   background-color: var(--surface);
-  margin: 2px;
+  margin: 2px 4px 2px 0;
 }
 
-/* ── CHAT ── */
-.chat-title {
-  font-size: 10px;
-  color: var(--text-dim);
-  -unity-font-style: bold;
-  margin-bottom: 3px;
-}
-
+/* ── CHAT ─────────────────────────────────────────────────────── */
 .chat-scroll {
   flex-grow: 1;
-  background-color: var(--surface);
-  border-radius: 4px;
-  border-width: 1px;
-  border-color: var(--border);
-  margin-bottom: 5px;
-  min-height: 80px;
+  background-color: var(--bg);
+  margin: 0;
+  min-height: 120px;
 }
 
 .chat-container {
-  padding: 6px;
+  padding: 10px 14px 4px 14px;
   flex-direction: column;
+}
+
+/* Welcome card */
+.welcome {
+  background-color: var(--surface);
+  border-radius: 14px;
+  border-width: 1px;
+  border-color: var(--border);
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+
+.welcome-title {
+  font-size: 13px;
+  -unity-font-style: bold;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.welcome-text {
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: normal;
+  margin-bottom: 10px;
+}
+
+.welcome-chips {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.chip {
+  background-color: var(--surface2);
+  border-width: 1px;
+  border-color: var(--border-strong);
+  border-radius: 14px;
+  color: var(--text);
+  font-size: 10px;
+  padding: 4px 10px;
+  margin: 2px 4px 2px 0;
+  -unity-text-align: middle-center;
+}
+
+.chip:hover {
+  background-color: var(--surface3);
+  border-color: var(--accent-dim);
 }
 
 /* User bubble */
 .bubble-user {
   align-self: flex-end;
-  background-color: rgb(31, 111, 235);
-  border-radius: 8px;
-  border-bottom-right-radius: 2px;
-  padding: 5px 9px;
-  margin-bottom: 6px;
-  max-width: 85%;
+  background-color: var(--accent);
+  border-radius: 16px;
+  border-bottom-right-radius: 4px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  max-width: 78%;
   font-size: 11px;
-  color: rgb(255, 255, 255);
+  color: rgb(15, 25, 40);
   white-space: normal;
+  -unity-font-style: bold;
 }
 
-/* System bubble */
+/* System / assistant bubble */
 .bubble-system {
   align-self: flex-start;
-  background-color: var(--surface2);
-  border-radius: 8px;
-  border-bottom-left-radius: 2px;
+  background-color: var(--surface);
+  border-radius: 16px;
+  border-bottom-left-radius: 4px;
   border-width: 1px;
   border-color: var(--border);
-  padding: 5px 9px;
-  margin-bottom: 6px;
-  max-width: 92%;
+  padding: 9px 12px;
+  margin-bottom: 8px;
+  max-width: 86%;
   font-size: 11px;
   color: var(--text);
   white-space: normal;
 }
 
-/* ── INPUT ROW ── */
-.input-row {
+/* ── COMPOSER ──────────────────────────────────────────────────── */
+.composer {
   flex-direction: row;
-  align-items: stretch;
-  margin-bottom: 5px;
+  align-items: flex-end;
+  padding: 8px 12px;
+  background-color: var(--bg);
+  border-top-width: 1px;
+  border-top-color: var(--border);
+}
+
+.input-wrap {
+  flex-grow: 1;
+  background-color: var(--surface);
+  border-radius: 18px;
+  border-width: 1px;
+  border-color: var(--border-strong);
+  padding: 4px 12px;
+  margin-right: 8px;
+  min-height: 32px;
+  justify-content: center;
 }
 
 .chat-input {
-  flex-grow: 1;
+  background-color: rgba(0,0,0,0);
+  border-width: 0;
   font-size: 11px;
-  margin-right: 5px;
+  color: var(--text);
+  margin: 0;
+  padding: 0;
+  min-height: 24px;
+}
+
+.chat-input > .unity-base-text-field__input {
+  background-color: rgba(0,0,0,0);
+  border-width: 0;
+  color: var(--text);
+  padding: 4px 0;
 }
 
 .send-btn {
-  font-size: 11px;
-  padding: 0 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 16px;
+  background-color: var(--accent);
+  color: rgb(15, 25, 40);
+  font-size: 16px;
   -unity-font-style: bold;
+  border-width: 0;
+  padding: 0;
+  margin: 0;
 }
 
-/* ── QUICK COMMANDS ── */
+.send-btn:hover {
+  background-color: rgb(146, 200, 255);
+}
+
+/* ── QUICK COMMANDS ───────────────────────────────────────────── */
 .cmd-row {
   flex-direction: row;
   flex-wrap: wrap;
+  padding: 4px 12px 10px 12px;
+  background-color: var(--bg);
 }
 
 .cmd-btn {
   font-size: 10px;
-  padding: 2px 6px;
-  margin-right: 3px;
-  margin-bottom: 2px;
+  color: var(--text-dim);
+  background-color: var(--surface);
+  border-width: 1px;
+  border-color: var(--border);
+  border-radius: 10px;
+  padding: 3px 9px;
+  margin: 2px 4px 2px 0;
+}
+
+.cmd-btn:hover {
+  background-color: var(--surface2);
+  color: var(--text);
 }

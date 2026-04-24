@@ -1,43 +1,65 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements">
   <ui:VisualElement class="root">
 
-    <!-- Python server bar -->
-    <ui:VisualElement class="server-bar">
-      <ui:VisualElement name="serverDot" class="server-dot"/>
-      <ui:Label name="serverLabel" text="Python sunucu kontrol ediliyor…" class="server-text"/>
-      <ui:Button name="serverButton" text="Başlat" class="server-btn"/>
+    <!-- ── HEADER ────────────────────────────────────────────────── -->
+    <ui:VisualElement class="header">
+      <ui:VisualElement class="header-left">
+        <ui:Label text="🤖" class="header-emoji"/>
+        <ui:VisualElement class="header-text">
+          <ui:Label text="BitBing Studio" class="header-title"/>
+          <ui:Label text="Unity için 6-ajanlı yapay zekâ" class="header-subtitle"/>
+        </ui:VisualElement>
+      </ui:VisualElement>
+      <ui:VisualElement class="header-status">
+        <ui:VisualElement name="serverDot" class="status-pill server-dot"/>
+        <ui:Label name="serverLabel" text="Sunucu kontrol ediliyor…" class="status-text"/>
+        <ui:VisualElement class="status-divider"/>
+        <ui:VisualElement name="connectionDot" class="status-pill conn-dot"/>
+        <ui:Label name="connectionLabel" text="Bridge yok" class="status-text"/>
+      </ui:VisualElement>
     </ui:VisualElement>
 
-    <!-- Unity bridge connection bar -->
-    <ui:VisualElement class="conn-bar">
-      <ui:VisualElement name="connectionDot" class="conn-dot"/>
-      <ui:Label name="connectionLabel" text="Bağlı değil" class="conn-text"/>
-      <ui:Button name="connectButton" text="Bağlan" class="conn-btn"/>
+    <!-- ── HIDDEN CONTROL BUTTONS (still wired in C#) ─────────────── -->
+    <ui:VisualElement class="hidden-controls">
+      <ui:Button name="serverButton"  text="Başlat"  class="ghost-btn"/>
+      <ui:Button name="connectButton" text="Bağlan"  class="ghost-btn"/>
     </ui:VisualElement>
 
-    <!-- Agent status grid (2 columns x 3 rows) -->
-    <ui:VisualElement name="agentCardsContainer" class="agent-grid"/>
+    <!-- ── AGENT STRIP (collapsible idle indicator) ───────────────── -->
+    <ui:VisualElement name="agentCardsContainer" class="agent-strip"/>
 
-    <!-- Chat section (grows to fill remaining space) -->
-    <ui:Label text="CHAT" class="chat-title"/>
+    <!-- ── CHAT ──────────────────────────────────────────────────── -->
     <ui:ScrollView name="chatScrollView" class="chat-scroll">
-      <ui:VisualElement name="chatContainer" class="chat-container"/>
+      <ui:VisualElement name="chatContainer" class="chat-container">
+        <!-- Welcome bubble (gets cleared on first user message) -->
+        <ui:VisualElement name="welcomeBubble" class="welcome">
+          <ui:Label text="👋 Hoş geldin!" class="welcome-title"/>
+          <ui:Label text="Bana oyununla ilgili bir şey söyle, 6 ajanım birlikte çalışıp inşa etsin. Ya da sadece sohbet et — pipeline başlatmadan cevap veririm." class="welcome-text"/>
+          <ui:VisualElement class="welcome-chips">
+            <ui:Button name="chip1" text="🎮 2D platformer oluştur" class="chip"/>
+            <ui:Button name="chip2" text="🧱 Zemin ve oyuncu ekle"   class="chip"/>
+            <ui:Button name="chip3" text="📸 Sahnemin ekranını çek"  class="chip"/>
+          </ui:VisualElement>
+        </ui:VisualElement>
+      </ui:VisualElement>
     </ui:ScrollView>
 
-    <!-- Prompt input row -->
-    <ui:VisualElement class="input-row">
-      <ui:TextField name="chatInput" class="chat-input"/>
-      <ui:Button name="sendButton" text="Gönder" class="send-btn"/>
+    <!-- ── COMPOSER ──────────────────────────────────────────────── -->
+    <ui:VisualElement class="composer">
+      <ui:VisualElement class="input-wrap">
+        <ui:TextField name="chatInput" class="chat-input" multiline="true"/>
+      </ui:VisualElement>
+      <ui:Button name="sendButton" text="↑" class="send-btn"/>
     </ui:VisualElement>
 
-    <!-- Quick command buttons -->
+    <!-- ── QUICK COMMANDS ────────────────────────────────────────── -->
     <ui:VisualElement class="cmd-row">
-      <ui:Button name="playButton"         text="▶"  class="cmd-btn"/>
-      <ui:Button name="stopButton"         text="⏹"  class="cmd-btn"/>
-      <ui:Button name="screenshotButton"   text="📸" class="cmd-btn"/>
-      <ui:Button name="refreshButton"      text="🔄" class="cmd-btn"/>
-      <ui:Button name="clearLogsButton"    text="🧹" class="cmd-btn"/>
-      <ui:Button name="clearConsoleButton" text="C"  class="cmd-btn"/>
+      <ui:Button name="playButton"         text="▶ Play"     class="cmd-btn"/>
+      <ui:Button name="stopButton"         text="⏹ Stop"     class="cmd-btn"/>
+      <ui:Button name="screenshotButton"   text="📸 Snap"    class="cmd-btn"/>
+      <ui:Button name="refreshButton"      text="🔄 Refresh" class="cmd-btn"/>
+      <ui:Button name="clearLogsButton"    text="🧹 Logs"    class="cmd-btn"/>
+      <ui:Button name="clearConsoleButton" text="C Console"  class="cmd-btn"/>
     </ui:VisualElement>
 
   </ui:VisualElement>
