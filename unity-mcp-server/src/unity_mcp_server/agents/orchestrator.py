@@ -172,10 +172,10 @@ class AgentOrchestrator:
         await emit("diafor", "running", "Ortam ve Unity bağlantısı kontrol ediliyor…")
         diafor_result = await self._diafor.check_environment("unity")
         if not diafor_result.get("ready", False):
-            await emit("diafor", "error", "Unity bağlantısı kurulamadı")
-            await progress({"type": "pipeline_failed", "reason": "Unity bridge bağlantısı yok — Unity Editor açık mı?"})
-            return
-        await emit("diafor", "done", "Bağlantı doğrulandı")
+            # Warn but continue — ahbab will surface any real connection error
+            await emit("diafor", "error", "Unity bridge yanıt vermedi (komutlar yine de deneniyor)")
+        else:
+            await emit("diafor", "done", "Bağlantı doğrulandı")
 
         # Phase 3: ahbab
         await emit("ahbab", "running", f"{len(task_dag)} komut Unity'e gönderiliyor…")
